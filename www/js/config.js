@@ -54,3 +54,40 @@ export const ZONE_PHASES = [
   { hold: 25, shrink: 20, radius: 35,  dps: 6 },
   { hold: 20, shrink: 15, radius: 8,   dps: 12 },
 ];
+
+// ----- Personajes (elegibles en el lobby) -----
+// speed: multiplicador de velocidad · hp: vida máxima · healMult: multiplicador de botiquines
+// medMax: botiquines que puede llevar · look: colores del modelo 3D
+export const CHARACTERS = {
+  recluta: {
+    name: 'Recluta', perk: 'Equilibrado', desc: 'Sin ventajas ni desventajas. Ideal para aprender.',
+    hp: 100, speed: 1.0, healMult: 1.0, medMax: 5,
+    look: { shirt: 0x1e88e5, pants: 0x2b3a46, helmet: 0x3e4d2a, skin: 0xe0ac7e },
+  },
+  tanque: {
+    name: 'Tanque', perk: '+25 vida · -10% velocidad', desc: 'Aguanta más golpes. Lento pero difícil de tumbar.',
+    hp: 125, speed: 0.9, healMult: 1.0, medMax: 5,
+    look: { shirt: 0x4b5a32, pants: 0x2d2f22, helmet: 0x2a2d33, skin: 0xc68a5e },
+  },
+  explorador: {
+    name: 'Explorador', perk: '+12% velocidad · -5 vida', desc: 'Rápido para rotar y escapar de la zona.',
+    hp: 95, speed: 1.12, healMult: 1.0, medMax: 5,
+    look: { shirt: 0xfb8c00, pants: 0x6d4c41, helmet: 0x8d6e63, skin: 0xf1c27d },
+  },
+  medico: {
+    name: 'Médico', perk: 'Curas +50% · 7 botiquines', desc: 'Sobrevive por más tiempo gracias a su equipo médico.',
+    hp: 100, speed: 1.0, healMult: 1.5, medMax: 7,
+    look: { shirt: 0xffffff, pants: 0x37474f, helmet: 0xe53935, skin: 0xe0ac7e },
+  },
+};
+export const CHARACTER_IDS = Object.keys(CHARACTERS);
+
+// ----- Sprint y resistencia -----
+export const SPRINT_MULT = 1.45;
+export const STAMINA_MAX = 100;
+export const STAMINA_DRAIN = 26;      // por segundo corriendo
+export const STAMINA_REGEN = 17;      // por segundo sin correr
+
+// ----- Suministros aéreos (cofres que aparecen en el mapa durante la partida) -----
+export const AIRDROP_FIRST = 75;      // segundos hasta el primer suministro
+export const AIRDROP_EVERY = 55;      // segundos entre suministros

@@ -13,6 +13,7 @@ export function createInput(canvas, els, settings) {
     look: null,          // { id, lx, ly }
     fireId: null,        // pointerId del botón de disparo
     adsId: null,         // pointerId del botón de apuntar
+    sprintId: null,      // pointerId del botón de correr
   };
 
   const sensMouse = () => 0.0022 * (settings.sens ?? 1);
@@ -52,7 +53,7 @@ export function createInput(canvas, els, settings) {
 
   window.addEventListener('pointerdown', (e) => {
     if (!isTouch(e)) return;
-    if (e.target.closest && e.target.closest('.btn, #menu, #end, #pause, #settings, #controls')) return;
+    if (e.target.closest && e.target.closest('.btn, #menu, #lobby, #end, #pause, #settings, #controls')) return;
     if (e.clientX < window.innerWidth / 2) {
       if (!touch.move) touch.move = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
     } else if (!touch.look) {
@@ -84,6 +85,10 @@ export function createInput(canvas, els, settings) {
       touch.adsId = null;
       els.ads?.classList.remove('active');
     }
+    if (touch.sprintId === e.pointerId) {
+      touch.sprintId = null;
+      els.sprint?.classList.remove('active');
+    }
   };
   window.addEventListener('pointerup', endPointer);
   window.addEventListener('pointercancel', endPointer);
@@ -100,6 +105,7 @@ export function createInput(canvas, els, settings) {
   };
   holdBtn(els.fire, (id) => { touch.fireId = id; }, null);
   holdBtn(els.ads, (id) => { touch.adsId = id; }, null);
+  holdBtn(els.sprint, (id) => { touch.sprintId = id; }, null);
   if (els.reload) els.reload.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.reload = true; });
   if (els.heal) els.heal.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.heal = true; });
   if (els.grenade) els.grenade.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.grenade = true; });
@@ -145,6 +151,7 @@ export function createInput(canvas, els, settings) {
       dpitch: acc.dpitch,
       fire: mouseFire || !!keys.Space || touch.fireId !== null,
       ads: mouseAds || !!keys.KeyQ || touch.adsId !== null,
+      sprint: !!(keys.ShiftLeft || keys.ShiftRight) || touch.sprintId !== null,
       reload: acc.reload,
       heal: acc.heal,
       grenade: acc.grenade,
@@ -168,6 +175,7 @@ export function createInput(canvas, els, settings) {
       touch.look = null;
       touch.fireId = null;
       touch.adsId = null;
+      touch.sprintId = null;
     },
   };
 }

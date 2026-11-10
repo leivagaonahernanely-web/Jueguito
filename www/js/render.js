@@ -452,14 +452,20 @@ export function createView(canvas) {
   }
 
   // ----- Personajes -----
-  function buildCharacter(colorIdx, isPlayer) {
+  // e: entidad del juego. Su `look` define colores según el personaje elegido en el lobby.
+  function buildCharacter(e) {
+    const isPlayer = e.isPlayer;
+    const look = e.look || {};
     const root = new THREE.Group();
     const body = new THREE.Group();
     root.add(body);
 
     const shirtMat = new THREE.MeshStandardMaterial({
-      color: isPlayer ? SHIRT_FOR_PLAYER : SHIRTS[colorIdx % SHIRTS.length], roughness: 0.7,
+      color: isPlayer ? (look.shirt ?? SHIRT_FOR_PLAYER) : SHIRTS[e.colorIdx % SHIRTS.length], roughness: 0.7,
     });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: look.pants ?? 0x2b3a46, roughness: 0.9 });
+    const helmetMat = new THREE.MeshStandardMaterial({ color: look.helmet ?? 0x3e4d2a, roughness: 0.45, metalness: 0.25 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: look.skin ?? 0xe0ac7e, roughness: 0.6 });
     const part = (geometry, mat, x, y, z, shadow = true) => {
       const m = new THREE.Mesh(geometry, mat);
       m.position.set(x, y, z);
@@ -469,14 +475,14 @@ export function createView(canvas) {
       return m;
     };
 
-    part(geo.pelvis, M.pants, 0, 0.9, 0);
+    part(geo.pelvis, pantsMat, 0, 0.9, 0);
     part(geo.torso, shirtMat, 0, 1.22, 0);
     const vest = part(geo.vest, M.olive, 0, 1.22, 0.01);
     vest.visible = false;
     part(geo.backpack, M.dark, 0, 1.2, -0.22);
-    part(geo.neck, M.skin, 0, 1.56, 0);
-    part(geo.head, M.skin, 0, 1.72, 0);
-    const helmet = part(geo.helmet, M.helmet, 0, 1.8, 0);
+    part(geo.neck, skinMat, 0, 1.56, 0);
+    part(geo.head, skinMat, 0, 1.72, 0);
+    const helmet = part(geo.helmet, helmetMat, 0, 1.8, 0);
     helmet.rotation.x = -0.12;
     part(geo.visor, M.visor, 0, 1.74, 0.16);
 
@@ -485,7 +491,7 @@ export function createView(canvas) {
     for (const sx of [-0.12, 0.12]) {
       const pivot = new THREE.Group();
       pivot.position.set(sx, 0.86, 0);
-      const leg = new THREE.Mesh(geo.leg, M.pants);
+      const leg = new THREE.Mesh(geo.leg, pantsMat);
       leg.position.y = -0.36;
       leg.castShadow = true;
       const boot = new THREE.Mesh(geo.boot, M.boots);
@@ -505,7 +511,7 @@ export function createView(canvas) {
       const arm = new THREE.Mesh(geo.arm, shirtMat);
       arm.position.y = -0.3;
       arm.castShadow = true;
-      const hand = new THREE.Mesh(geo.hand, M.skin);
+      const hand = new THREE.Mesh(geo.hand, skinMat);
       hand.position.y = -0.64;
       hand.castShadow = true;
       pivot.add(arm, hand);
@@ -764,7 +770,7 @@ export function createView(canvas) {
     for (const e of G.entities) {
       let ch = chars.get(e.id);
       if (!ch) {
-        ch = buildCharacter(e.colorIdx, e.isPlayer);
+        ch = buildCharacter(e);
         chars.set(e.id, ch);
         scene.add(ch.root);
         ch.shotsSeen = e.shots;

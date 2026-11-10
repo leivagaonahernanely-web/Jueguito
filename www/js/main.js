@@ -3,7 +3,7 @@ import { G, genMap, startMatch, update, zoneText } from './logic.js';
 import { createView } from './render.js';
 import { createInput } from './input.js';
 import * as SFX from './audio.js';
-import { WORLD, WEAPONS, MAX_MEDS, MAX_GRENADES, ZONE_PHASES } from './config.js';
+import { WORLD, WEAPONS, MAX_MEDS, MAX_GRENADES, ZONE_PHASES, CHARACTERS, CHARACTER_IDS } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -15,6 +15,9 @@ const els = {
   minimap: $('minimap'),
   joy: $('joy'), joyKnob: $('joyKnob'),
   fire: $('btnFire'), ads: $('btnAds'), reload: $('btnReload'), heal: $('btnHeal'), grenade: $('btnGrenade'),
+  sprint: $('btnSprint'), stamfill: $('stamfill'),
+  lobby: $('lobby'), lobbyCount: $('lobbyCount'), lobbyStatus: $('lobbyStatus'), charGrid: $('charGrid'),
+  charInfo: $('charInfo'), lobbyPlayers: $('lobbyPlayers'), lobbyStart: $('lobbyStart'), lobbyBack: $('lobbyBack'),
   countdown: $('countdown'), countText: $('countText'),
   menu: $('menu'), name: $('name'), play: $('play'),
   openControls: $('openControls'), openSettings: $('openSettings'),
@@ -35,11 +38,13 @@ window.addEventListener('error', (e) => showFatal(e.message || String(e.error)))
 window.addEventListener('unhandledrejection', (e) => showFatal(String(e.reason?.message || e.reason)));
 
 // ----- Ajustes persistentes -----
-const DEFAULTS = { sens: 1, vol: 0.6, quality: 'alta', name: '' };
+const DEFAULTS = { sens: 1, vol: 0.6, quality: 'alta', name: '', char: 'recluta' };
+if (!CHARACTERS[DEFAULTS.char]) DEFAULTS.char = 'recluta';
 let settings = { ...DEFAULTS };
 try {
   settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('br3d') || '{}') };
 } catch (_) { /* ajustes por defecto */ }
+if (!CHARACTERS[settings.char]) settings.char = 'recluta';
 function saveSettings() {
   try { localStorage.setItem('br3d', JSON.stringify(settings)); } catch (_) { /* sin almacenamiento */ }
 }
@@ -85,7 +90,7 @@ function hide(el) { el.classList.add('hidden'); }
 
 function showMenu() {
   hide(els.hud); hide(els.cross); hide(els.hitmarker); hide(els.countdown); hide(els.end); hide(els.pause);
-  hide(els.settings); hide(els.controls);
+  hide(els.settings); hide(els.controls); hide(els.lobby);
   show(els.menu);
 }
 
@@ -123,12 +128,12 @@ function startGame() {
   saveSettings();
   SFX.initAudio(settings.vol);
 
-  startMatch(settings.name || 'Tú');
+  startMatch(settings.name || 'Tú', settings.char);
   view.reset();
   endShown = false;
   paused = false;
   lastHpShown = 100;
-  hide(els.menu); hide(els.end); hide(els.pause); hide(els.settings); hide(els.controls);
+  hide(els.menu); hide(els.end); hide(els.pause); hide(els.settings); hide(els.controls); hide(els.lobby);
   show(els.hud); show(els.cross); show(els.hitmarker);
   requestLock();
 
@@ -153,8 +158,107 @@ function startGame() {
   }, 700);
 }
 
-els.play.addEventListener('click', startGame);
-els.again.addEventListener('click', startGame);
+// ----- Sala de espera (lobby) -----
+const LOBBY_NAMES = [
+  'Lobo', 'Halcón', 'Sombra', 'Tigre', 'Kaiser', 'Nova', 'Ghost', 'Víbora', 'Rex', 'Pixel', 'Drako', 'Fénix',
+  'Zorro', 'Blaze', 'Atlas', 'Kairo', 'Mambo', 'Thor', 'Ninja', 'Raptor', 'Luna', 'Ciclón', 'Nébula', 'Tormenta',
+  'Bruno', 'Kira', 'Sable', 'Orión', 'Bisonte', 'Cobra', 'Titán', 'Lince', 'Furia', 'Quasar', 'Hunter', 'Rayo',
+  'Maverick', 'Yeti', 'Vortex',
+];
+const LOBBY_SIZE = 30;
+let lobbyPlayers = [];          // { name, me }
+let lobbyFillT = null;          // intervalo que va llenando la sala
+let lobbyStartT = null;         // inicio automático cuando la sala está llena
+
+function stopLobby() {
+  if (lobbyFillT) clearInterval(lobbyFillT);
+  if (lobbyStartT) clearTimeout(lobbyStartT);
+  lobbyFillT = null;
+  lobbyStartT = null;
+}
+
+function renderCharCards() {
+  els.charGrid.textContent = '';
+  for (const id of CHARACTER_IDS) {
+    const ch = CHARACTERS[id];
+    const card = document.createElement('button');
+    card.className = 'char-card' + (settings.char === id ? ' sel' : '');
+    const sw = document.createElement('span');
+    sw.className = 'char-swatch';
+    sw.style.setProperty('--shirt', `#${ch.look.shirt.toString(16).padStart(6, '0')}`);
+    sw.style.setProperty('--pants', `#${ch.look.pants.toString(16).padStart(6, '0')}`);
+    const txt = document.createElement('span');
+    const title = document.createElement('b');
+    title.textContent = ch.name;
+    const perk = document.createElement('small');
+    perk.textContent = ch.perk;
+    txt.append(title, perk);
+    card.append(sw, txt);
+    card.addEventListener('click', () => {
+      settings.char = id;
+      saveSettings();
+      renderCharCards();
+      showCharInfo();
+    });
+    els.charGrid.appendChild(card);
+  }
+  showCharInfo();
+}
+
+function showCharInfo() {
+  const ch = CHARACTERS[settings.char];
+  els.charInfo.textContent = `${ch.name}: ${ch.desc} (vida ${ch.hp})`;
+}
+
+function renderLobbyPlayers() {
+  els.lobbyPlayers.textContent = '';
+  for (const pl of lobbyPlayers) {
+    const chip = document.createElement('span');
+    chip.textContent = pl.name;
+    if (pl.me) chip.className = 'me';
+    els.lobbyPlayers.appendChild(chip);
+  }
+  els.lobbyCount.textContent = String(lobbyPlayers.length);
+}
+
+function openLobby() {
+  stopLobby();
+  hide(els.menu); hide(els.end); hide(els.settings); hide(els.controls); hide(els.pause);
+  show(els.lobby);
+  if (document.pointerLockElement) document.exitPointerLock();
+  const myName = (els.name.value || '').trim().slice(0, 14) || 'Tú';
+  lobbyPlayers = [{ name: myName, me: true }];
+  renderLobbyPlayers();
+  renderCharCards();
+  els.lobbyStatus.textContent = 'Esperando a más jugadores…';
+  lobbyFillT = setInterval(() => {
+    if (lobbyPlayers.length >= LOBBY_SIZE) {
+      clearInterval(lobbyFillT);
+      lobbyFillT = null;
+      els.lobbyStatus.textContent = 'Sala completa. La partida empieza en 4 s';
+      lobbyStartT = setTimeout(startFromLobby, 4000);
+      return;
+    }
+    const used = new Set(lobbyPlayers.map((p) => p.name));
+    let name = LOBBY_NAMES[(Math.random() * LOBBY_NAMES.length) | 0];
+    if (used.has(name)) name = `${name} ${lobbyPlayers.length}`;
+    lobbyPlayers.push({ name, me: false });
+    renderLobbyPlayers();
+    els.lobbyStatus.textContent = `Esperando a más jugadores… (${LOBBY_SIZE - lobbyPlayers.length} faltan)`;
+  }, 230);
+}
+
+function startFromLobby() {
+  stopLobby();
+  hide(els.lobby);
+  startGame();
+}
+
+els.lobbyStart.addEventListener('click', startFromLobby);
+els.lobbyBack.addEventListener('click', () => { stopLobby(); hide(els.lobby); show(els.menu); });
+
+els.play.addEventListener('click', openLobby);
+els.again.addEventListener('click', openLobby);
 els.toMenuEnd.addEventListener('click', toMenu);
 els.toMenuPause.addEventListener('click', toMenu);
 els.resume.addEventListener('click', () => {
@@ -225,6 +329,9 @@ function handleEvents() {
       case 'pickup':
         SFX.playPickup();
         break;
+      case 'airdrop':
+        SFX.playPickup();
+        break;
       case 'reload':
         if (ev.id === p.id) SFX.playReload();
         break;
@@ -255,6 +362,7 @@ function updateHUD(dt) {
   els.hpfill.style.width = `${hp}%`;
   els.hptext.textContent = hp;
   els.armorfill.style.width = `${Math.max(0, Math.min(100, p.armor))}%`;
+  els.stamfill.style.width = `${Math.max(0, Math.min(100, Math.round(p.stamina)))}%`;
 
   const w = WEAPONS[p.weapon];
   els.weapon.textContent = weaponName(p.weapon);
@@ -322,6 +430,21 @@ function drawMinimap() {
     c.stroke();
   }
 
+  // Suministro aéreo activo: anillo dorado pulsante
+  if (G.airdrop) {
+    const ax = G.airdrop.x * k, az = G.airdrop.z * k;
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 180);
+    c.strokeStyle = `rgba(255, 215, 0, ${0.5 + 0.5 * pulse})`;
+    c.lineWidth = 2;
+    c.beginPath();
+    c.arc(ax, az, 7 + pulse * 3, 0, Math.PI * 2);
+    c.stroke();
+    c.fillStyle = '#ffd700';
+    c.beginPath();
+    c.arc(ax, az, 3, 0, Math.PI * 2);
+    c.fill();
+  }
+
   const p = G.player;
   if (p) {
     const x = p.x * k, z = p.z * k;
@@ -364,4 +487,5 @@ function frame(ts) {
 
 // Arranque: mostrar menú principal
 showMenu();
+renderCharCards();
 requestAnimationFrame(frame);

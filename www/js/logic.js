@@ -3,6 +3,8 @@ import {
   WORLD, PLAYER_SPEED, ADS_SPEED_MULT, BOT_SPEED, PLAYER_RADIUS, BOT_COUNT, HOUSE_COUNT, CRATE_COUNT,
   TREE_COUNT, LOOT_WEAPONS, LOOT_MEDS, LOOT_GRENADES, LOOT_ARMOR, MAX_MEDS, MAX_GRENADES, HEAL_AMOUNT,
   WEAPONS, WEAPON_WEIGHTS, GRENADE, ZONE_PHASES, ZONE_START_RADIUS,
+  CHARACTERS, CHARACTER_IDS, SPRINT_MULT, STAMINA_MAX, STAMINA_DRAIN, STAMINA_REGEN,
+  AIRDROP_FIRST, AIRDROP_EVERY,
 } from './config.js';
 
 export const G = {
@@ -22,6 +24,8 @@ export const G = {
   place: 0,
   won: false,
   playerName: 'Tú',
+  airdrop: null,          // { x, z, ids, t } suministro activo en el mapa (marcador en el minimapa)
+  airdropT: 0,            // segundos hasta el próximo suministro
 };
 
 const HOUSE_COLORS = ['#d7ccc8', '#bcaaa4', '#efebe9', '#ffe0b2', '#c5e1a5', '#b0bec5', '#f8bbd0', '#ffccbc'];
@@ -127,10 +131,13 @@ function freeSpot(r = PLAYER_RADIUS) {
 }
 
 // ---------- Entidades ----------
-function makeEntity(p, name, isPlayer, colorIdx) {
+function makeEntity(p, name, isPlayer, colorIdx, charId = 'recluta') {
+  const ch = CHARACTERS[charId] || CHARACTERS.recluta;
   return {
     id: G.nextId++, x: p.x, z: p.z, r: PLAYER_RADIUS, name, isPlayer, colorIdx,
-    hp: 100, armor: 0, alive: true, kills: 0,
+    charId, look: ch.look, speedMult: ch.speed, healMult: ch.healMult, medMax: ch.medMax,
+    hp: ch.hp, maxHp: ch.hp, stamina: STAMINA_MAX, sprinting: false,
+    armor: 0, alive: true, kills: 0,
     weapon: 'pistola', ammo: WEAPONS.pistola.mag, reloadT: 0,
     meds: 0, grenades: 0, cool: 0, bloom: 0, healT: 0, throwT: 0, shots: 0,
     yaw: 0, pitch: 0, moving: false, walk: 0, flash: 0, ads: false,
@@ -191,7 +198,8 @@ function stepToward(e, tx, tz, speed, dt) {
   const len = Math.hypot(dx, dz);
   if (len < 1e-6) return;
   e.yaw = Math.atan2(dx, dz);
-  moveEnt(e, (dx / len) * speed * dt, (dz / len) * speed * dt);
+  const s = speed * (e.speedMult || 1);
+  moveEnt(e, (dx / len) * s * dt, (dz / len) * s * dt);
 }
 
 function normalize(d, noise = 0) {
@@ -220,7 +228,7 @@ export function startReload(e) {
 }
 
 function fireWeapon(e, dir) {
-  if (!e.alive || e.cool > 0 || e.reloadT > 0) return;
+  if (!e.alive || e.cool > 0 || e.reloadT > 0 || e.sprinting) return;
   const w = WEAPONS[e.weapon];
   if (e.ammo <= 0) { startReload(e); return; }
   e.ammo--;
@@ -262,11 +270,11 @@ export function throwGrenade(e, dir) {
 }
 
 export function useMed(e) {
-  if (!e.alive || e.meds <= 0 || e.hp >= 100 || e.healT > 0) return;
+  if (!e.alive || e.meds <= 0 || e.hp >= e.maxHp || e.healT > 0) return;
   e.meds--;
   e.healT = 1.1;
   G.events.push({ type: 'heal', id: e.id });
-  e.hp = Math.min(100, e.hp + HEAL_AMOUNT);
+  e.hp = Math.min(e.maxHp, e.hp + HEAL_AMOUNT * (e.healMult || 1));
 }
 
 function damage(e, amt, src, label = '', head = false) {
@@ -320,7 +328,7 @@ function tryPickup(e) {
     if (it.lock > 0) continue;
     if (Math.hypot(e.x - it.x, e.z - it.z) > e.r + 1.1) continue;
     if (it.kind === 'med') {
-      if (e.meds >= MAX_MEDS) continue;
+      if (e.meds >= (e.medMax || MAX_MEDS)) continue;
       e.meds++;
     } else if (it.kind === 'grenade') {
       if (e.grenades >= MAX_GRENADES) continue;
@@ -478,7 +486,15 @@ function updatePlayer(dt, input) {
   let fwd = input.forward, str = input.strafe;
   const m = Math.hypot(fwd, str);
   if (m > 1) { fwd /= m; str /= m; }
-  const speed = PLAYER_SPEED * (p.ads ? ADS_SPEED_MULT : 1);
+  // Sprint: solo hacia adelante, sin apuntar y con resistencia; no se puede disparar mientras corres
+  const sprinting = !!input.sprint && fwd > 0.3 && !p.ads && p.stamina > 0;
+  if (sprinting) {
+    p.stamina = Math.max(0, p.stamina - STAMINA_DRAIN * dt);
+  } else {
+    p.stamina = Math.min(STAMINA_MAX, p.stamina + STAMINA_REGEN * dt);
+  }
+  p.sprinting = sprinting && p.stamina > 0;
+  const speed = PLAYER_SPEED * p.speedMult * (p.ads ? ADS_SPEED_MULT : 1) * (p.sprinting ? SPRINT_MULT : 1);
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const rx = -fz, rz = fx;
   moveEnt(p, (fx * fwd + rx * str) * speed * dt, (fz * fwd + rz * str) * speed * dt);
@@ -521,7 +537,7 @@ function updateBot(b, dt) {
     }
   }
   if (b.goal && !G.loot.includes(b.goal)) b.goal = null;
-  if (b.hp < 50 && b.meds > 0 && !b.target) useMed(b);
+  if (b.hp < b.maxHp * 0.5 && b.meds > 0 && !b.target) useMed(b);
 
   const w = WEAPONS[b.weapon];
   const outsideZone = Math.hypot(b.x - G.zone.cx, b.z - G.zone.cz) > G.zone.radius - 6;
@@ -567,7 +583,7 @@ function updateBot(b, dt) {
 }
 
 // ---------- Partida ----------
-export function startMatch(name = 'Tú') {
+export function startMatch(name = 'Tú', charId = 'recluta') {
   G.nextId = 1;
   G.playerName = name || 'Tú';
   genMap();
@@ -582,11 +598,14 @@ export function startMatch(name = 'Tú') {
   G.place = 0;
 
   const ps = freeSpot();
-  G.player = makeEntity(ps, G.playerName, true, 0);
+  G.player = makeEntity(ps, G.playerName, true, 0, CHARACTERS[charId] ? charId : 'recluta');
   G.player.grenades = 1;
+  G.airdrop = null;
+  G.airdropT = AIRDROP_FIRST;
   for (let i = 0; i < BOT_COUNT; i++) {
     const s = freeSpot();
-    G.bots.push(makeEntity(s, `Bot ${i + 1}`, false, 1 + (i % 7)));
+    const bot = CHARACTER_IDS[(Math.random() * CHARACTER_IDS.length) | 0];
+    G.bots.push(makeEntity(s, `Bot ${i + 1}`, false, 1 + (i % 7), bot));
   }
   G.entities = [G.player, ...G.bots];
 
@@ -610,6 +629,38 @@ export function startMatch(name = 'Tú') {
     cx: WORLD / 2, cz: WORLD / 2,
   };
   G.state = 'playing';
+}
+
+// ---------- Suministros aéreos ----------
+function spawnAirdrop() {
+  const s = freeSpot(1.2);
+  const ids = [];
+  const add = (kind, extra = {}) => {
+    const id = G.nextId++;
+    ids.push(id);
+    G.loot.push({ id, x: s.x + rand(-1.5, 1.5), z: s.z + rand(-1.5, 1.5), kind, lock: 0, ...extra });
+  };
+  add('weapon', { weapon: 'francotirador' });
+  add('weapon', { weapon: 'rifle' });
+  add('med');
+  add('armor');
+  add('grenade');
+  G.airdrop = { x: s.x, z: s.z, ids, t: 90 };
+  G.airdropT = AIRDROP_EVERY;
+  addFeed('📦 ¡Suministro aéreo en el mapa!');
+  G.events.push({ type: 'airdrop', x: s.x, z: s.z });
+}
+
+function updateAirdrops(dt) {
+  if (G.airdropT > 0) {
+    G.airdropT -= dt;
+    if (G.airdropT <= 0) spawnAirdrop();
+  }
+  if (G.airdrop) {
+    G.airdrop.t -= dt;
+    const left = G.loot.some((it) => G.airdrop.ids.includes(it.id));
+    if (G.airdrop.t <= 0 || !left) G.airdrop = null;
+  }
 }
 
 function endGame(won) {
@@ -652,10 +703,11 @@ export function update(dt, input) {
 
   updatePlayer(dt, input);
   for (const b of G.bots) if (b.alive) updateBot(b, dt);
+  updateAirdrops(dt);
   updateBullets(dt);
   updateGrenades(dt);
 
-  for (const e of G.entities) if (e.moving) e.walk += dt * 9;
+  for (const e of G.entities) if (e.moving) e.walk += dt * 9 * (e.sprinting ? 1.5 : 1);
 
   G.feed = G.feed.filter((f) => G.elapsed - f.t < 6);
   checkWin();

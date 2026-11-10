@@ -20,6 +20,7 @@ Abre la dirección que muestre (por ejemplo `http://localhost:3000`).
 **Controles PC**
 
 - `WASD`: moverse
+- `Shift`: correr (consume resistencia; no puedes disparar mientras corres)
 - Ratón: mirar (clic en la pantalla para capturar el ratón; `Esc` pausa)
 - Clic izquierdo o `Espacio`: disparar (mantén para armas automáticas)
 - Clic derecho o `Q`: apuntar (mirilla más precisa)
@@ -29,7 +30,21 @@ Abre la dirección que muestre (por ejemplo `http://localhost:3000`).
 
 - Joystick izquierdo (mitad izquierda): moverse
 - Arrastrar en la mitad derecha: mirar
-- Botones: DISPARAR, APUNTAR, recargar (R), curar (+) y granada (💣)
+- Botones: DISPARAR, APUNTAR, recargar (R), curar (+), granada (💣) y CORRER
+
+## Partida y lobby
+
+1. **JUGAR** abre la sala de espera: se llena de jugadores hasta 30 y luego empieza sola (o pulsa **INICIAR AHORA**).
+2. Eliges uno de los **4 personajes** antes de empezar. Cada uno cambia tu forma de jugar:
+
+| Personaje | Ventaja | Desventaja |
+|---|---|---|
+| Recluta | Equilibrado | — |
+| Tanque | +25 de vida | -10% de velocidad |
+| Explorador | +12% de velocidad | -5 de vida |
+| Médico | Curas +50%, hasta 7 botiquines | — |
+
+Los bots también tienen personajes distintos.
 
 ## Reglas y armas
 
@@ -37,6 +52,8 @@ Abre la dirección que muestre (por ejemplo `http://localhost:3000`).
 - Armas: Pistola, Subfusil, Escopeta, Rifle de asalto y Francotirador. Cada una con daño, cadencia, alcance y retroceso distintos. Los disparos a la cabeza hacen más daño.
 - Granadas con radio de explosión, chalecos que absorben daño y botiquines.
 - Al pasar sobre un objeto en el suelo lo recoges. Tu arma anterior queda en el suelo.
+- **Sprint**: corres más rápido hacia adelante gastando resistencia (la barra amarilla). Se recupera al dejar de correr.
+- **Suministros aéreos**: cada cierto tiempo cae un cofre con armas raras, botiquín, chaleco y granada. Aparece como un anillo dorado en el minimapa hasta que alguien lo vacía.
 - Ganas si eres el último con vida.
 
 ## Generar el APK para Android
@@ -83,7 +100,7 @@ package.json            dependencias
 
 ## Ideas para seguir
 
-- Sonidos y música (Web Audio).
+- Multijugador en línea (requiere un servidor): la sala de espera ya está lista para cambiar los bots por jugadores reales.
 - Mapa con colinas, ríos y más variedad de edificios.
-- Granadas, escudos y vehículos.
-- Multijugador en línea (requiere un servidor).
+- Escudos, vehículos y modelos de personaje más detallados.
+- Música de fondo y más efectos de sonido.

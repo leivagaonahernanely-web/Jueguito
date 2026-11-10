@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0b1020">
   <title>Battle Royale 3D</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
   <script type="importmap">
     {
@@ -37,6 +38,7 @@
     <div id="bottom">
       <div class="bar hp"><div id="hpfill"></div><span id="hptext">100</span></div>
       <div class="bar armor"><div id="armorfill"></div></div>
+      <div class="bar stamina"><div id="stamfill"></div></div>
       <div id="weaponbox">
         <div id="weapon">Pistola</div>
         <div id="ammo">12/12</div>
@@ -54,6 +56,7 @@
     <button class="btn" id="btnReload">R</button>
     <button class="btn" id="btnHeal">+</button>
     <button class="btn" id="btnGrenade">💣</button>
+    <button class="btn" id="btnSprint">CORRER</button>
   </div>
 
   <div id="countdown" class="overlay hidden"><div id="countText">3</div></div>
@@ -74,6 +77,23 @@
         <button id="openSettings" class="ghost">Ajustes</button>
       </div>
       <p class="small">30 jugadores · zona que se cierra · armas, granadas y chalecos</p>
+    </div>
+  </div>
+
+  <!-- Sala de espera (lobby) -->
+  <div id="lobby" class="overlay hidden">
+    <div class="menu-inner lobby-inner">
+      <p class="tag">SALA DE ESPERA</p>
+      <div class="lobby-top">
+        <div class="lobby-count"><span id="lobbyCount">1</span>/30 jugadores</div>
+        <div id="lobbyStatus">Esperando a más jugadores…</div>
+      </div>
+      <h2>ELIGE TU PERSONAJE</h2>
+      <div id="charGrid" class="char-grid"></div>
+      <div id="charInfo" class="char-info"></div>
+      <div id="lobbyPlayers" class="lobby-players"></div>
+      <button id="lobbyStart" class="cta">INICIAR AHORA</button>
+      <button id="lobbyBack" class="ghost">Volver</button>
     </div>
   </div>
 
@@ -107,6 +127,7 @@
         <span>Mirar</span><span>Ratón (clic en la pantalla para capturarlo)</span>
         <span>Disparar</span><span>Clic izquierdo o Espacio</span>
         <span>Apuntar</span><span>Clic derecho o Q</span>
+        <span>Correr</span><span>Shift (no se puede disparar corriendo)</span>
         <span>Recargar</span><span>R</span>
         <span>Curar</span><span>H</span>
         <span>Granada</span><span>G</span>
@@ -115,6 +136,7 @@
         <span>Mover</span><span>Joystick izquierdo</span>
         <span>Mirar</span><span>Arrastra en la mitad derecha</span>
         <span>Disparar / apuntar / curar / granada</span><span>Botones de la derecha</span>
+        <span>Correr</span><span>Botón CORRER (abajo a la derecha)</span>
       </div>
       <button id="backControls" class="ghost">Volver</button>
     </div>
