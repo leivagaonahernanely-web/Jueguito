@@ -53,6 +53,10 @@ Los bots también tienen personajes distintos.
 - Granadas con radio de explosión, chalecos que absorben daño y botiquines.
 - Al pasar sobre un objeto en el suelo lo recoges. Tu arma anterior queda en el suelo.
 - **Sprint**: corres más rápido hacia adelante gastando resistencia (la barra amarilla). Se recupera al dejar de correr.
+- **Retroceso**: al disparar sube la mira y se recupera sola al soltar el gatillo. Controla el retroceso moviendo el ratón hacia abajo.
+- **Bots**: tardan un momento en reaccionar cuando te ven y se retiran si quedan con poca vida y sin botiquines.
+- **Dirección del daño**: una flecha roja te indica de dónde te disparan.
+- **Eliminaciones**: un banner muestra a quién eliminaste, con racha si encadenas varias (20 s entre una y otra).
 - **Suministros aéreos**: cada cierto tiempo cae un cofre con armas raras, botiquín, chaleco y granada. Aparece como un anillo dorado en el minimapa hasta que alguien lo vacía.
 - Ganas si eres el último con vida.
 

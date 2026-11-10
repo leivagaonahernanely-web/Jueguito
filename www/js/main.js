@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   hud: $('hud'), alive: $('alive'), zone: $('zone'), kills: $('kills'), feed: $('feed'),
   hpfill: $('hpfill'), hptext: $('hptext'), armorfill: $('armorfill'),
+  dmgdir: $('dmgdir'), banner: $('banner'),
   weapon: $('weapon'), ammo: $('ammo'), reloadfill: $('reloadfill'),
   grenades: $('grenades'), meds: $('meds'),
   damage: $('damage'), hitmarker: $('hitmarker'), cross: $('cross'),
@@ -61,6 +62,11 @@ let endShown = false;
 let hitTimer = 0;
 let damageTimer = 0;
 let lastHpShown = 100;
+let dirT = 0;            // tiempo que se ve la flecha de daño
+let dirAngle = 0;        // dirección del atacante relativa a tu mira
+let bannerT = 0;         // tiempo que se ve el banner de eliminación
+let streak = 0;          // eliminaciones seguidas
+let lastKillT = -99;
 
 try {
   genMap();
@@ -133,6 +139,12 @@ function startGame() {
   endShown = false;
   paused = false;
   lastHpShown = 100;
+  streak = 0;
+  lastKillT = -99;
+  bannerT = 0;
+  dirT = 0;
+  els.banner.classList.add('hidden');
+  els.dmgdir.classList.remove('show');
   hide(els.menu); hide(els.end); hide(els.pause); hide(els.settings); hide(els.controls); hide(els.lobby);
   show(els.hud); show(els.cross); show(els.hitmarker);
   requestLock();
@@ -317,6 +329,11 @@ function handleEvents() {
       case 'hurt':
         SFX.playHurt();
         damageTimer = 0.35;
+        if (ev.sx != null) {
+          // Ángulo del atacante respecto a donde miras (0 = enfrente, + = derecha)
+          dirAngle = Math.atan2(ev.sx - p.x, ev.sz - p.z) - p.yaw;
+          dirT = 1.0;
+        }
         break;
       case 'hit':
         hitTimer = 0.16;
@@ -324,7 +341,10 @@ function handleEvents() {
         SFX.playHitMarker(!!ev.head);
         break;
       case 'kill':
-        if (ev.killer === p.id) SFX.playKill();
+        if (ev.killer === p.id) {
+          SFX.playKill();
+          showKillBanner(ev.victim);
+        }
         break;
       case 'pickup':
         SFX.playPickup();
@@ -349,6 +369,23 @@ function handleEvents() {
 
 // ----- Interfaz -----
 const weaponName = (k) => WEAPONS[k]?.name ?? k;
+
+// Banner al eliminar a alguien, con racha si eliminas varios seguidos
+function showKillBanner(victimId) {
+  const victim = G.entities.find((e) => e.id === victimId);
+  streak = G.elapsed - lastKillT < 20 ? streak + 1 : 1;
+  lastKillT = G.elapsed;
+  const b = els.banner;
+  b.textContent = `ELIMINASTE A ${victim ? victim.name : 'un enemigo'}`;
+  if (streak >= 2) {
+    const small = document.createElement('small');
+    small.textContent = `¡RACHA x${streak}!`;
+    b.appendChild(small);
+  }
+  b.classList.remove('hidden');
+  b.style.opacity = '1';
+  bannerT = 2.6;
+}
 
 function updateHUD(dt) {
   const p = G.player;
@@ -385,6 +422,18 @@ function updateHUD(dt) {
   if (hitTimer > 0) {
     hitTimer -= dt;
     els.hitmarker.classList.toggle('show', hitTimer > 0);
+  }
+  // Flecha de dirección del daño
+  if (dirT > 0) {
+    dirT -= dt;
+    els.dmgdir.style.transform = `rotate(${-dirAngle}rad)`;
+    els.dmgdir.classList.toggle('show', dirT > 0);
+  }
+  // Banner de eliminación: se desvanece al final
+  if (bannerT > 0) {
+    bannerT -= dt;
+    els.banner.style.opacity = String(Math.min(1, bannerT * 2));
+    if (bannerT <= 0) els.banner.classList.add('hidden');
   }
   if (damageTimer > 0) {
     damageTimer -= dt;

@@ -1,6 +1,6 @@
 // Render 3D con Three.js: mapa, personajes animados, armas, efectos, zona, cámara y post-procesado.
 import * as THREE from 'three';
-import { G, blockedAt } from './logic.js';
+import { G, blockedAt, viewPitch } from './logic.js';
 import { WORLD, WEAPONS, GRENADE } from './config.js';
 
 const SHIRTS = [0xe53935, 0x1e88e5, 0x43a047, 0xfb8c00, 0x8e24aa, 0x00acc1, 0xfdd835, 0x6d4c41];
@@ -1024,7 +1024,8 @@ export function createView(canvas) {
     if (G.player && worldGroup) {
       const p = G.player;
       const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
-      const cp = Math.cos(p.pitch), sp = Math.sin(p.pitch);
+      const vp = viewPitch(p);
+      const cp = Math.cos(vp), sp = Math.sin(vp);
       const rx = -fz, rz = fx;
       const ads = p.ads && p.alive;
       const dist = cameraDistance(p, fx, fz, ads ? 2.6 : 4.4, ads ? 0.45 : 0.85);

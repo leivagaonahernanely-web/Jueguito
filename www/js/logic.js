@@ -140,7 +140,8 @@ function makeEntity(p, name, isPlayer, colorIdx, charId = 'recluta') {
     armor: 0, alive: true, kills: 0,
     weapon: 'pistola', ammo: WEAPONS.pistola.mag, reloadT: 0,
     meds: 0, grenades: 0, cool: 0, bloom: 0, healT: 0, throwT: 0, shots: 0,
-    yaw: 0, pitch: 0, moving: false, walk: 0, flash: 0, ads: false,
+    yaw: 0, pitch: 0, recoilOff: 0, moving: false, walk: 0, flash: 0, ads: false,
+    reactT: 0, retreat: false,
     lastKiller: null, lastWeapon: '',
     // IA de bots
     target: null, goal: null, thinkT: 0, grenadeT: 0,
@@ -216,9 +217,15 @@ function aimDirAt(tx, ty, tz, ex, ey, ez) {
   return { x: dx / len, y: dy / len, z: dz / len };
 }
 
+// Ángulo vertical real de la mira: lo que apunta el jugador más el retroceso acumulado
+export function viewPitch(p) {
+  return clamp(p.pitch + p.recoilOff, -0.9, 0.9);
+}
+
 function aimDirPlayer(p) {
-  const cp = Math.cos(p.pitch);
-  return { x: Math.sin(p.yaw) * cp, y: Math.sin(p.pitch), z: Math.cos(p.yaw) * cp };
+  const pitch = viewPitch(p);
+  const cp = Math.cos(pitch);
+  return { x: Math.sin(p.yaw) * cp, y: Math.sin(pitch), z: Math.cos(p.yaw) * cp };
 }
 
 export function startReload(e) {
@@ -252,7 +259,8 @@ function fireWeapon(e, dir) {
       traveled: 0, range: w.range, dmg: w.dmg, owner: e, weapon: e.weapon,
     });
   }
-  if (e.isPlayer) e.pitch = clamp(e.pitch + w.recoil * (e.ads ? 0.5 : 1), -0.9, 0.9);
+  // El retroceso sube la mira mientras disparas y se recupera solo al soltar (ver updatePlayer)
+  if (e.isPlayer) e.recoilOff = Math.min(0.6, e.recoilOff + w.recoil * (e.ads ? 0.5 : 1));
   G.events.push({ type: 'shot', id: e.id, x: ox, y: oy, z: oz, weapon: e.weapon, dir });
 }
 
@@ -288,7 +296,7 @@ function damage(e, amt, src, label = '', head = false) {
   e.flash = 0.14;
   e.lastKiller = src ? src.name : '';
   e.lastWeapon = label;
-  if (e.isPlayer && src !== e) G.events.push({ type: 'hurt', amt });
+  if (e.isPlayer && src !== e) G.events.push({ type: 'hurt', amt, sx: src ? src.x : null, sz: src ? src.z : null });
   if (src && src.isPlayer && e !== src) G.events.push({ type: 'hit', victim: e.id, head });
   if (e.hp <= 0) kill(e, src, label);
 }
@@ -499,6 +507,8 @@ function updatePlayer(dt, input) {
   const rx = -fz, rz = fx;
   moveEnt(p, (fx * fwd + rx * str) * speed * dt, (fz * fwd + rz * str) * speed * dt);
 
+  // Recuperación del retroceso: vuelve a la mira original cuando dejas de disparar
+  if (!input.fire) p.recoilOff = Math.max(0, p.recoilOff - dt * (p.ads ? 2.4 : 1.6));
   if (input.fire) fireWeapon(p, aimDirPlayer(p));
   if (input.reload) startReload(p);
   if (input.heal) useMed(p);
@@ -508,6 +518,7 @@ function updatePlayer(dt, input) {
 
 // ---------- Bots ----------
 function updateBot(b, dt) {
+  if (b.reactT > 0) b.reactT -= dt;
   b.thinkT -= dt;
   if (b.thinkT <= 0) {
     b.thinkT = rand(0.2, 0.35);
@@ -521,6 +532,11 @@ function updateBot(b, dt) {
           best = d;
           b.target = e;
         }
+      }
+      if (b.target && b.target !== (b.lastTarget || null)) {
+        // Nuevo enemigo: tarda un momento en reaccionar (como un jugador real)
+        b.reactT = rand(0.35, 0.8) * (b.charId === 'medico' ? 1.1 : 1);
+        b.lastTarget = b.target;
       }
     }
     b.goal = null;
@@ -546,7 +562,12 @@ function updateBot(b, dt) {
     const t = b.target;
     const d = Math.hypot(b.x - t.x, b.z - t.z);
     b.yaw = Math.atan2(t.x - b.x, t.z - b.z);
-    if (d > w.range * 0.5) {
+    // Retirada: herido y sin botiquines, se aleja del enemigo mientras puede
+    b.retreat = b.hp < b.maxHp * 0.3 && b.meds === 0;
+    if (b.retreat) {
+      stepToward(b, b.x + (b.x - t.x), b.z + (b.z - t.z), BOT_SPEED * 1.15, dt);
+      b.yaw = Math.atan2(t.x - b.x, t.z - b.z);
+    } else if (d > w.range * 0.5) {
       stepToward(b, t.x, t.z, BOT_SPEED, dt);
     } else {
       if (Math.random() < dt * 0.6) b.strafe *= -1;
@@ -560,7 +581,7 @@ function updateBot(b, dt) {
       const dir = aimDirAt(t.x, 0.9, t.z, b.x, 1.4, b.z);
       throwGrenade(b, { x: dir.x, y: 0.35, z: dir.z });
     }
-    if (d < w.range * 0.85) {
+    if (d < w.range * 0.85 && b.reactT <= 0) {
       const noise = w.pellets > 1 ? 0.03 : 0.075 + d * 0.0009;
       fireWeapon(b, normalize(aimDirAt(t.x, 1.0, t.z, b.x, 1.35, b.z), noise));
     }
