@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Battle Royale</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div id="top">
+      <span id="alive">Vivos: 0</span>
+      <span id="zone">Zona</span>
+      <span id="kills">Bajas: 0</span>
+    </div>
+    <div id="feed"></div>
+    <div id="bottom">
+      <div id="hpbar">
+        <div id="hpfill"></div>
+        <span id="hptext">100</span>
+      </div>
+      <div id="info">
+        <span id="weapon">Pistola</span>
+        <span id="ammo"></span>
+        <span class="sep">|</span>
+        Botiquines: <span id="meds">0</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="menu" class="overlay">
+    <h1>BATTLE ROYALE</h1>
+    <p>Sé el último en pie.</p>
+    <button id="play">JUGAR</button>
+    <p class="small">
+      PC: WASD mover · ratón apuntar y disparar · R recargar · H botiquín<br>
+      Móvil: joystick izquierdo mover · joystick derecho apuntar y disparar · botón + curar
+    </p>
+  </div>
+
+  <div id="end" class="overlay hidden">
+    <h1 id="endTitle"></h1>
+    <p id="endText"></p>
+    <button id="again">Jugar otra vez</button>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

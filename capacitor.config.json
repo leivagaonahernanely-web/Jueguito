@@ -1,0 +1,9 @@
+{
+  "appId": "com.jueguito.battleroyale",
+  "appName": "Battle Royale",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "android": {
+    "backgroundColor": "#1b2a1b"
+  }
+}
