@@ -114,6 +114,25 @@ export function createView(canvas) {
     ring: new THREE.CircleGeometry(0.62, 32),
   };
 
+  // Textura de camuflaje (manchas grises que se tiñen con el color de la camiseta)
+  const camoTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#9a9a9a';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 46; i++) {
+      g.fillStyle = Math.random() < 0.5 ? '#5c5c5c' : '#d2d2d2';
+      g.beginPath();
+      g.ellipse(Math.random() * 128, Math.random() * 128, 6 + Math.random() * 14, 4 + Math.random() * 10, Math.random() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+
   // ----- Materiales compartidos -----
   const M = {
     metal: new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.35, metalness: 0.75 }),
@@ -230,6 +249,24 @@ export function createView(canvas) {
       const r = Math.random();
       g.fillStyle = r < 0.45 ? 'rgba(35,80,25,0.35)' : r < 0.9 ? 'rgba(120,175,75,0.28)' : 'rgba(180,160,80,0.12)';
       g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 3);
+    }
+    // Hojas de hierba (trazos cortos) y parches de tierra
+    for (let i = 0; i < 2600; i++) {
+      const x = Math.random() * 256, y = Math.random() * 256;
+      g.strokeStyle = Math.random() < 0.6 ? 'rgba(60,110,40,0.55)' : 'rgba(150,200,90,0.45)';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + (Math.random() - 0.5) * 4, y - 2 - Math.random() * 4);
+      g.stroke();
+    }
+    for (let i = 0; i < 26; i++) {
+      const x = Math.random() * 256, y = Math.random() * 256, r = 6 + Math.random() * 14;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(140,110,70,0.5)');
+      grd.addColorStop(1, 'rgba(140,110,70,0)');
+      g.fillStyle = grd;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
     }
     const t = new THREE.CanvasTexture(c);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -462,7 +499,9 @@ export function createView(canvas) {
 
     const shirtMat = new THREE.MeshStandardMaterial({
       color: isPlayer ? (look.shirt ?? SHIRT_FOR_PLAYER) : SHIRTS[e.colorIdx % SHIRTS.length], roughness: 0.7,
+      map: camoTex,
     });
+    const glovesMat = M.dark;
     const pantsMat = new THREE.MeshStandardMaterial({ color: look.pants ?? 0x2b3a46, roughness: 0.9 });
     const helmetMat = new THREE.MeshStandardMaterial({ color: look.helmet ?? 0x3e4d2a, roughness: 0.45, metalness: 0.25 });
     const skinMat = new THREE.MeshStandardMaterial({ color: look.skin ?? 0xe0ac7e, roughness: 0.6 });
@@ -479,8 +518,20 @@ export function createView(canvas) {
     part(geo.torso, shirtMat, 0, 1.22, 0);
     const vest = part(geo.vest, M.olive, 0, 1.22, 0.01);
     vest.visible = false;
+    // Bolsillos del chaleco
+    for (const sx of [-0.14, 0.14]) {
+      const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.06), M.dark);
+      pouch.position.set(sx, 0.02, 0.2);
+      vest.add(pouch);
+    }
     part(geo.backpack, M.dark, 0, 1.2, -0.22);
     part(geo.neck, skinMat, 0, 1.56, 0);
+    // Cinturón y ojos (detalle visible de cerca)
+    part(new THREE.BoxGeometry(0.52, 0.09, 0.32), M.dark, 0, 1.0, 0);
+    for (const sx of [-0.07, 0.07]) {
+      const eye = part(new THREE.BoxGeometry(0.05, 0.035, 0.02), M.visor, sx, 1.75, 0.2, false);
+      eye.material = M.visor;
+    }
     part(geo.head, skinMat, 0, 1.72, 0);
     const helmet = part(geo.helmet, helmetMat, 0, 1.8, 0);
     helmet.rotation.x = -0.12;
@@ -511,7 +562,7 @@ export function createView(canvas) {
       const arm = new THREE.Mesh(geo.arm, shirtMat);
       arm.position.y = -0.3;
       arm.castShadow = true;
-      const hand = new THREE.Mesh(geo.hand, skinMat);
+      const hand = new THREE.Mesh(geo.hand, glovesMat);
       hand.position.y = -0.64;
       hand.castShadow = true;
       pivot.add(arm, hand);
@@ -647,16 +698,29 @@ export function createView(canvas) {
 
   async function loadPost() {
     try {
-      const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+      const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { ShaderPass }, { VignetteShader }, { RoomEnvironment }] = await Promise.all([
         import('three/addons/postprocessing/EffectComposer.js'),
         import('three/addons/postprocessing/RenderPass.js'),
         import('three/addons/postprocessing/UnrealBloomPass.js'),
         import('three/addons/postprocessing/OutputPass.js'),
+        import('three/addons/postprocessing/ShaderPass.js'),
+        import('three/addons/shaders/VignetteShader.js'),
+        import('three/addons/environments/RoomEnvironment.js'),
       ]);
+      // Reflejos y rebote de luz realistas en todos los materiales
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      scene.environmentIntensity = 0.55;
+      pmrem.dispose();
       composer = new EffectComposer(renderer);
       composer.addPass(new RenderPass(scene, camera));
       bloomPass = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.32, 0.5, 0.92);
       composer.addPass(bloomPass);
+      // Viñeteado suave: oscurece los bordes y enfoca la mirada al centro
+      const vignette = new ShaderPass(VignetteShader);
+      vignette.uniforms.offset.value = 1.25;
+      vignette.uniforms.darkness.value = 0.85;
+      composer.addPass(vignette);
       composer.addPass(new OutputPass());
       usePost = true;
       applyQuality(quality);
