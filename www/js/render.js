@@ -1,5 +1,6 @@
 // Render 3D con Three.js: mapa, personajes animados, armas, efectos, zona, cámara y post-procesado.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { G, blockedAt, viewPitch } from './logic.js';
 import { WORLD, WEAPONS, GRENADE } from './config.js';
 
@@ -77,18 +78,25 @@ export function createView(canvas) {
   // ----- Geometrías compartidas -----
   const box = (x, y, z) => new THREE.BoxGeometry(x, y, z);
   const geo = {
-    torso: box(0.5, 0.62, 0.3),
-    pelvis: box(0.44, 0.2, 0.26),
+    torso: new RoundedBoxGeometry(0.5, 0.62, 0.3, 4, 0.08),
+    pelvis: new RoundedBoxGeometry(0.44, 0.2, 0.26, 3, 0.06),
+    shoulder: new THREE.SphereGeometry(0.11, 16, 12),
+    hair: new THREE.SphereGeometry(0.212, 28, 16, 0, TAU, 0, Math.PI * 0.62),
+    eyeW: new THREE.SphereGeometry(0.035, 12, 10),
+    pupil: new THREE.SphereGeometry(0.02, 10, 8),
+    nose: new RoundedBoxGeometry(0.05, 0.07, 0.05, 2, 0.02),
+    mouth: new RoundedBoxGeometry(0.09, 0.02, 0.03, 2, 0.008),
+    cinturon: new RoundedBoxGeometry(0.52, 0.09, 0.32, 2, 0.03),
     neck: new THREE.CylinderGeometry(0.08, 0.09, 0.14, 8),
-    head: new THREE.SphereGeometry(0.2, 18, 14),
+    head: new THREE.SphereGeometry(0.2, 32, 24),
     helmet: new THREE.SphereGeometry(0.245, 18, 12, 0, TAU, 0, Math.PI / 2),
     visor: box(0.32, 0.06, 0.14),
-    leg: box(0.17, 0.72, 0.18),
-    boot: box(0.19, 0.16, 0.24),
-    arm: box(0.15, 0.6, 0.15),
+    leg: new RoundedBoxGeometry(0.17, 0.72, 0.18, 3, 0.06),
+    boot: new RoundedBoxGeometry(0.19, 0.16, 0.24, 3, 0.06),
+    arm: new RoundedBoxGeometry(0.15, 0.6, 0.15, 3, 0.06),
     hand: new THREE.SphereGeometry(0.085, 10, 8),
-    vest: box(0.54, 0.5, 0.34),
-    backpack: box(0.38, 0.46, 0.2),
+    vest: new RoundedBoxGeometry(0.54, 0.5, 0.34, 3, 0.04),
+    backpack: new RoundedBoxGeometry(0.38, 0.46, 0.2, 3, 0.05),
     lootBox: box(0.6, 0.3, 0.9),
     medBox: box(0.5, 0.5, 0.5),
     medBar: box(0.34, 0.1, 0.1),
@@ -99,8 +107,10 @@ export function createView(canvas) {
     foliage: new THREE.IcosahedronGeometry(1.25, 1),
     rock: new THREE.DodecahedronGeometry(0.5, 0),
     bush: new THREE.IcosahedronGeometry(0.6, 0),
-    window: new THREE.PlaneGeometry(0.9, 1.2),
+    window: new RoundedBoxGeometry(0.9, 1.2, 0.1, 2, 0.02),
+    sill: new RoundedBoxGeometry(1.1, 0.1, 0.22, 2, 0.03),
     roof: box(1, 0.4, 1),
+    chimney: box(0.6, 1.6, 0.6),
     door: box(0.9, 2.0, 0.1),
     lampPole: new THREE.CylinderGeometry(0.06, 0.08, 4.2, 6),
     lampHead: new THREE.SphereGeometry(0.22, 10, 8),
@@ -113,6 +123,27 @@ export function createView(canvas) {
     zoneWall: new THREE.CylinderGeometry(1, 1, 30, 72, 1, true),
     ring: new THREE.CircleGeometry(0.62, 32),
   };
+
+  // Textura de pared: estuco con grano, usada como color y como relieve
+  const wallTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#c8c8c8';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 5000; i++) {
+      const v = 150 + Math.random() * 105;
+      g.fillStyle = `rgba(${v},${v},${v},0.25)`;
+      g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 2, 1 + Math.random() * 2);
+    }
+    // Líneas horizontales de juntas (sutiles)
+    g.fillStyle = 'rgba(90,90,90,0.25)';
+    for (let y = 0; y < 256; y += 32) g.fillRect(0, y, 256, 2);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
 
   // Textura de camuflaje (manchas grises que se tiñen con el color de la camiseta)
   const camoTex = (() => {
@@ -136,6 +167,10 @@ export function createView(canvas) {
   // ----- Materiales compartidos -----
   const M = {
     metal: new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.35, metalness: 0.75 }),
+    eyeW: new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.25 }),
+    trim: new THREE.MeshStandardMaterial({ color: 0xefe9df, roughness: 0.6 }),
+    plinth: new THREE.MeshStandardMaterial({ color: 0x6d6a66, roughness: 1 }),
+    brick: new THREE.MeshStandardMaterial({ color: 0x8d4f3a, roughness: 0.9 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.6, metalness: 0.3 }),
     skin: new THREE.MeshStandardMaterial({ color: 0xe0ac7e, roughness: 0.6 }),
     pants: new THREE.MeshStandardMaterial({ color: 0x2b3a46, roughness: 0.9 }),
@@ -323,17 +358,52 @@ export function createView(canvas) {
     // Casas: paredes, techo y puerta
     const doors = [];
     for (const o of houses) {
-      const wall = new THREE.Mesh(box(o.w, o.h, o.d), new THREE.MeshStandardMaterial({ color: o.color, roughness: 0.85 }));
+      // Zócalo de piedra
+      const plinth = new THREE.Mesh(new RoundedBoxGeometry(o.w + 0.25, 0.5, o.d + 0.25, 2, 0.05), M.plinth);
+      plinth.position.set(o.x + o.w / 2, 0.22, o.z + o.d / 2);
+      plinth.receiveShadow = true;
+      worldGroup.add(plinth);
+
+      // Pared con textura de estuco y relieve (bump)
+      const wt = wallTex.clone();
+      wt.repeat.set(Math.max(1, o.w / 4), Math.max(1, o.h / 4));
+      wt.needsUpdate = true;
+      const wallMat = new THREE.MeshStandardMaterial({ color: o.color, map: wt, bumpMap: wt, bumpScale: 0.6, roughness: 0.85 });
+      const wall = new THREE.Mesh(box(o.w, o.h, o.d), wallMat);
       wall.position.set(o.x + o.w / 2, o.h / 2, o.z + o.d / 2);
       wall.castShadow = true;
       wall.receiveShadow = true;
       worldGroup.add(wall);
 
-      const roof = new THREE.Mesh(geo.roof, M.roof);
-      roof.scale.set(o.w + 0.7, 1, o.d + 0.7);
-      roof.position.set(o.x + o.w / 2, o.h + 0.2, o.z + o.d / 2);
+      // Tejado a dos aguas (caballete a lo largo del lado más largo)
+      const ridgeX = o.w >= o.d;
+      const hb = (ridgeX ? o.d : o.w) / 2 + 0.45;
+      const len = (ridgeX ? o.w : o.d) + 0.6;
+      const ht = 2.3;
+      const shape = new THREE.Shape();
+      shape.moveTo(-hb, 0);
+      shape.lineTo(hb, 0);
+      shape.lineTo(0, ht);
+      shape.closePath();
+      const rg = new THREE.ExtrudeGeometry(shape, { depth: len, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06, bevelSegments: 2 });
+      rg.translate(0, 0, -len / 2);
+      const roof = new THREE.Mesh(rg, M.roof);
+      if (ridgeX) {
+        roof.rotation.y = Math.PI / 2;
+        roof.position.set(o.x + o.w / 2, o.h, o.z + o.d / 2);
+      } else {
+        roof.position.set(o.x + o.w / 2, o.h, o.z + o.d / 2);
+      }
       roof.castShadow = true;
       worldGroup.add(roof);
+
+      // Chimenea en la mitad de los edificios
+      if (Math.random() < 0.5) {
+        const ch = new THREE.Mesh(geo.chimney, M.brick);
+        ch.position.set(o.x + o.w * 0.72, o.h + ht * 0.55, o.z + o.d * 0.3);
+        ch.castShadow = true;
+        worldGroup.add(ch);
+      }
 
       const face = Math.random() < 0.5;
       doors.push({ x: face ? o.x + o.w * (0.3 + Math.random() * 0.4) : o.x - 0.02, z: face ? o.z - 0.02 : o.z + o.d * (0.3 + Math.random() * 0.4), ry: face ? Math.PI : -Math.PI / 2 });
@@ -383,6 +453,16 @@ export function createView(canvas) {
       });
       im.instanceMatrix.needsUpdate = true;
       worldGroup.add(im);
+      // Alféizar debajo del cristal
+      const sills = new THREE.InstancedMesh(geo.sill, M.trim, list.length);
+      list.forEach((w, i) => {
+        dummy.position.set(w.x, w.y - 0.66, w.z);
+        dummy.rotation.set(0, w.ry, 0);
+        dummy.updateMatrix();
+        sills.setMatrixAt(i, dummy.matrix);
+      });
+      sills.instanceMatrix.needsUpdate = true;
+      worldGroup.add(sills);
     }
 
     // Cajas de madera
@@ -526,16 +606,24 @@ export function createView(canvas) {
     }
     part(geo.backpack, M.dark, 0, 1.2, -0.22);
     part(geo.neck, skinMat, 0, 1.56, 0);
-    // Cinturón y ojos (detalle visible de cerca)
-    part(new THREE.BoxGeometry(0.52, 0.09, 0.32), M.dark, 0, 1.0, 0);
-    for (const sx of [-0.07, 0.07]) {
-      const eye = part(new THREE.BoxGeometry(0.05, 0.035, 0.02), M.visor, sx, 1.75, 0.2, false);
-      eye.material = M.visor;
-    }
+    part(geo.cinturon, M.dark, 0, 1.0, 0);
     part(geo.head, skinMat, 0, 1.72, 0);
-    const helmet = part(geo.helmet, helmetMat, 0, 1.8, 0);
-    helmet.rotation.x = -0.12;
-    part(geo.visor, M.visor, 0, 1.74, 0.16);
+    if (look.helmet != null) {
+      const helmet = part(geo.helmet, helmetMat, 0, 1.8, 0);
+      helmet.rotation.x = -0.12;
+      part(geo.visor, M.visor, 0, 1.74, 0.16);
+    } else {
+      // Sin casco: pelo y cara
+      const hairMat = new THREE.MeshStandardMaterial({ color: look.hair ?? 0x2b1d14, roughness: 0.8 });
+      const hair = part(geo.hair, hairMat, 0, 1.76, -0.02);
+      hair.rotation.x = -0.25;
+      for (const sx of [-0.07, 0.07]) {
+        part(geo.eyeW, M.eyeW, sx, 1.75, 0.165, false);
+        part(geo.pupil, M.dark, sx, 1.75, 0.19, false);
+      }
+      part(geo.nose, skinMat, 0, 1.71, 0.2);
+      part(geo.mouth, M.dark, 0, 1.63, 0.17, false);
+    }
 
     // Piernas (pivote en la cadera)
     const legs = [];
@@ -563,6 +651,9 @@ export function createView(canvas) {
       arm.position.y = -0.3;
       arm.castShadow = true;
       const hand = new THREE.Mesh(geo.hand, glovesMat);
+      const shoulder = new THREE.Mesh(geo.shoulder, shirtMat);
+      shoulder.castShadow = true;
+      pivot.add(shoulder);
       hand.position.y = -0.64;
       hand.castShadow = true;
       pivot.add(arm, hand);

@@ -72,7 +72,7 @@ export const CHARACTERS = {
   explorador: {
     name: 'Explorador', perk: '+12% velocidad · -5 vida', desc: 'Rápido para rotar y escapar de la zona.',
     hp: 95, speed: 1.12, healMult: 1.0, medMax: 5,
-    look: { shirt: 0xfb8c00, pants: 0x6d4c41, helmet: 0x8d6e63, skin: 0xf1c27d },
+    look: { shirt: 0xfb8c00, pants: 0x6d4c41, helmet: null, hair: 0x4e342e, skin: 0xf1c27d },
   },
   medico: {
     name: 'Médico', perk: 'Curas +50% · 7 botiquines', desc: 'Sobrevive por más tiempo gracias a su equipo médico.',

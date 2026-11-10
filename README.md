@@ -84,6 +84,11 @@ npm run build:apk
 
 El APK queda en `android/app/build/outputs/apk/debug/app-debug.apk`.
 
+## Visual
+
+- Casas con tejado a dos aguas, zócalo de piedra, chimenea, alféizares y pared con textura de estuco y relieve.
+- Personajes con formas redondeadas, hombros, cara con ojos y nariz, y pelo o casco según el personaje. Los modelos son procedurales (sin archivos de arte); para un realismo mayor harían falta modelos 3D externos.
+
 ## Estructura
 
 ```
