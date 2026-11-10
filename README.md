@@ -87,7 +87,9 @@ El APK queda en `android/app/build/outputs/apk/debug/app-debug.apk`.
 ## Visual
 
 - Casas con tejado a dos aguas, zócalo de piedra, chimenea, alféizares y pared con textura de estuco y relieve.
-- Personajes con formas redondeadas, hombros, cara con ojos y nariz, y pelo o casco según el personaje. Los modelos son procedurales (sin archivos de arte); para un realismo mayor harían falta modelos 3D externos.
+- Personajes: modelo de soldado animado (`www/assets/soldier.glb`, del ejemplo de Three.js, basado en Mixamo) con idle, caminar y correr. Si el modelo no carga, se usa un personaje simple de respaldo.
+- Licencia: revisa los términos de Mixamo y de los ejemplos de Three.js antes de publicar el juego con fines comerciales.
+- Personajes simples de respaldo, hombros, cara con ojos y nariz, y pelo o casco según el personaje. Los modelos son procedurales (sin archivos de arte); para un realismo mayor harían falta modelos 3D externos.
 
 ## Estructura
 

@@ -1,6 +1,8 @@
 // Render 3D con Three.js: mapa, personajes animados, armas, efectos, zona, cámara y post-procesado.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { G, blockedAt, viewPitch } from './logic.js';
 import { WORLD, WEAPONS, GRENADE } from './config.js';
 
@@ -569,8 +571,88 @@ export function createView(canvas) {
   }
 
   // ----- Personajes -----
+  // ----- Modelo de soldado (Mixamo, con animaciones reales) -----
+  let soldier = null;        // GLTF cargado
+  let soldierScale = 1;      // escala para que mida 1.8 m
+  let soldierMinY = 0;       // altura de los pies del modelo original
+  const tmpV = new THREE.Vector3();
+
+  function loadSoldier() {
+    new GLTFLoader().loadAsync('assets/soldier.glb').then((g) => {
+      const box = new THREE.Box3().setFromObject(g.scene);
+      const h = box.max.y - box.min.y;
+      soldierScale = 1.8 / h;
+      soldierMinY = box.min.y;
+      soldier = g;
+    }).catch((err) => console.warn('Modelo de soldado no disponible, se usa el modelo simple:', err));
+  }
+
+  function playAnim(ch, name) {
+    if (ch.current === name || !ch.actions[name]) return;
+    const next = ch.actions[name];
+    const prev = ch.actions[ch.current];
+    next.reset().fadeIn(0.2).play();
+    if (prev) prev.fadeOut(0.2);
+    ch.current = name;
+  }
+
+  function buildSoldierCharacter(e) {
+    const look = e.look || {};
+    const root = new THREE.Group();
+    const model = SkeletonUtils.clone(soldier.scene);
+    model.scale.setScalar(soldierScale);
+    model.position.y = -soldierMinY * soldierScale;
+    // "body" es el grupo que mueve la animación de caminar; el modelo va dentro con su ajuste de pies
+    const body = new THREE.Group();
+    body.add(model);
+    root.add(body);
+
+    // Color del uniforme según el personaje (los bots usan la paleta)
+    const tint = new THREE.Color(e.isPlayer ? (look.shirt ?? SHIRT_FOR_PLAYER) : SHIRTS[e.colorIdx % SHIRTS.length]);
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      o.receiveShadow = true;
+      o.material = o.material.clone();
+      if (o.material.name === 'VanguardBodyMat') o.material.color.copy(tint).multiplyScalar(0.55);
+    });
+
+    const mixer = new THREE.AnimationMixer(model);
+    const actions = {};
+    for (const clip of soldier.animations) actions[clip.name] = mixer.clipAction(clip);
+    actions.Idle?.play();
+
+    const gunPivot = new THREE.Group();
+    root.add(gunPivot);
+    const guns = {};
+    for (const k of Object.keys(WEAPONS)) {
+      const g = buildGunModel(k);
+      g.visible = false;
+      gunPivot.add(g);
+      guns[k] = g;
+    }
+
+    let ring = null;
+    if (e.isPlayer) {
+      ring = new THREE.Mesh(geo.ring, playerRingMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.03;
+      root.add(ring);
+    }
+
+    return {
+      root, body, legs: [], arms: [], vest: { visible: false }, shirtMat: null, gunPivot, guns, ring,
+      weapon: null, shotsSeen: 0, kick: 0, dead: false, deathT: 0, lean: 0,
+      mixer, actions, current: 'Idle',
+      // Three.js quita los dos puntos de los nombres: el hueso se llama "mixamorigRightHand"
+      hand: model.getObjectByName('mixamorigRightHand') || model.getObjectByName('mixamorig:RightHand'),
+      animated: true,
+    };
+  }
+
   // e: entidad del juego. Su `look` define colores según el personaje elegido en el lobby.
   function buildCharacter(e) {
+    if (soldier) return buildSoldierCharacter(e);
     const isPlayer = e.isPlayer;
     const look = e.look || {};
     const root = new THREE.Group();
@@ -935,6 +1017,11 @@ export function createView(canvas) {
       ch.root.position.set(e.x, 0, e.z);
       ch.root.rotation.y = e.yaw;
       ch.vest.visible = e.armor > 0;
+      if (ch.animated) {
+        const want = !e.alive ? 'Idle' : e.sprinting ? 'Run' : e.moving ? 'Walk' : 'Idle';
+        playAnim(ch, want);
+        ch.mixer.update(dt);
+      }
 
       if (!e.alive) {
         if (!ch.dead) {
@@ -951,10 +1038,12 @@ export function createView(canvas) {
         continue;
       }
 
-      // Caminar: piernas alternando y balanceo del cuerpo
+      // Caminar: piernas alternando y balanceo del cuerpo (el modelo animado lo hace solo)
       const swing = e.moving ? Math.sin(e.walk) * 0.7 : 0;
-      ch.legs[0].rotation.x = swing;
-      ch.legs[1].rotation.x = -swing;
+      if (!ch.animated) {
+        ch.legs[0].rotation.x = swing;
+        ch.legs[1].rotation.x = -swing;
+      }
       walkBob = e.moving ? Math.abs(Math.sin(e.walk * 2)) * 0.05 : 0;
       const breathe = Math.sin(G.elapsed * 2 + e.id) * 0.01;
       ch.body.position.y = walkBob + breathe;
@@ -1004,8 +1093,18 @@ export function createView(canvas) {
       ch.gunPivot.position.set(gunX, gunY, gunZ - kickAmt * 0.5);
       ch.gunPivot.rotation.set(gunRx - ch.kick * 0.1, 0, gunRz);
       ch.gunPivot.visible = gunVisible;
-      ch.arms[0].rotation.x = armRx;
-      ch.arms[1].rotation.x = armRxR;
+      if (ch.animated && ch.hand) {
+        // El arma sigue a la mano derecha del modelo
+        ch.root.updateMatrixWorld(true);
+        ch.hand.getWorldPosition(tmpV);
+        ch.root.worldToLocal(tmpV);
+        ch.gunPivot.position.copy(tmpV);
+        ch.gunPivot.rotation.set(0, 0, 0);
+      }
+      if (!ch.animated) {
+        ch.arms[0].rotation.x = armRx;
+        ch.arms[1].rotation.x = armRxR;
+      }
       if (ch.ring) ch.ring.visible = true;
     }
   }
@@ -1233,5 +1332,6 @@ export function createView(canvas) {
   buildWorld();
   applyQuality(quality);
 
+  loadSoldier();
   return { render, reset, resize, buildWorld, loadPost, applyQuality, get lamps() { return lampRefs; } };
 }
