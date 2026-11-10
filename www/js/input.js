@@ -1,24 +1,30 @@
 // Entrada: teclado y ratón (PC) y joysticks/botones táctiles (celular).
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
-export function createInput(canvas, els) {
+export function createInput(canvas, els, settings) {
   const keys = {};
-  const acc = { dyaw: 0, dpitch: 0, reload: false, heal: false };
+  const acc = { dyaw: 0, dpitch: 0, reload: false, heal: false, grenade: false };
   let mouseFire = false;
+  let mouseAds = false;
   let locked = false;
 
   const touch = {
-    move: null,                 // { id, ox, oy, x, y }
-    look: null,                 // { id, lx, ly }
-    fireId: null,               // pointerId del botón de disparo
+    move: null,          // { id, ox, oy, x, y }
+    look: null,          // { id, lx, ly }
+    fireId: null,        // pointerId del botón de disparo
+    adsId: null,         // pointerId del botón de apuntar
   };
+
+  const sensMouse = () => 0.0022 * (settings.sens ?? 1);
+  const sensTouch = () => 0.0065 * (settings.sens ?? 1);
 
   // ----- Teclado -----
   window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code === 'KeyR' && !e.repeat) acc.reload = true;
     if (e.code === 'KeyH' && !e.repeat) acc.heal = true;
-    if (e.code === 'Space') e.preventDefault();
+    if (e.code === 'KeyG' && !e.repeat) acc.grenade = true;
+    if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
   });
   window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
@@ -28,14 +34,17 @@ export function createInput(canvas, els) {
   });
   window.addEventListener('mousemove', (e) => {
     if (!locked) return;
-    acc.dyaw -= e.movementX * 0.0022;
-    acc.dpitch -= e.movementY * 0.0022;
+    acc.dyaw -= e.movementX * sensMouse();
+    acc.dpitch -= e.movementY * sensMouse();
   });
   window.addEventListener('mousedown', (e) => {
-    if (e.button === 0 && locked) mouseFire = true;
+    if (!locked) return;
+    if (e.button === 0) mouseFire = true;
+    if (e.button === 2) mouseAds = true;
   });
   window.addEventListener('mouseup', (e) => {
     if (e.button === 0) mouseFire = false;
+    if (e.button === 2) mouseAds = false;
   });
 
   // ----- Táctil -----
@@ -43,7 +52,7 @@ export function createInput(canvas, els) {
 
   window.addEventListener('pointerdown', (e) => {
     if (!isTouch(e)) return;
-    if (e.target.closest && e.target.closest('.btn, #menu, #end')) return;
+    if (e.target.closest && e.target.closest('.btn, #menu, #end, #pause, #settings, #controls')) return;
     if (e.clientX < window.innerWidth / 2) {
       if (!touch.move) touch.move = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
     } else if (!touch.look) {
@@ -57,8 +66,8 @@ export function createInput(canvas, els) {
       touch.move.y = e.clientY;
     }
     if (touch.look && touch.look.id === e.pointerId) {
-      acc.dyaw -= (e.clientX - touch.look.lx) * 0.0065;
-      acc.dpitch -= (e.clientY - touch.look.ly) * 0.0065;
+      acc.dyaw -= (e.clientX - touch.look.lx) * sensTouch();
+      acc.dpitch -= (e.clientY - touch.look.ly) * sensTouch();
       touch.look.lx = e.clientX;
       touch.look.ly = e.clientY;
     }
@@ -71,20 +80,29 @@ export function createInput(canvas, els) {
       touch.fireId = null;
       els.fire?.classList.remove('active');
     }
+    if (touch.adsId === e.pointerId) {
+      touch.adsId = null;
+      els.ads?.classList.remove('active');
+    }
   };
   window.addEventListener('pointerup', endPointer);
   window.addEventListener('pointercancel', endPointer);
 
   // Botones táctiles
-  if (els.fire) {
-    els.fire.addEventListener('pointerdown', (e) => {
+  const holdBtn = (el, onDown, onUp) => {
+    if (!el) return;
+    el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      touch.fireId = e.pointerId;
-      els.fire.classList.add('active');
+      onDown(e.pointerId);
+      el.classList.add('active');
     });
-  }
+    el.addEventListener('pointerup', () => { el.classList.remove('active'); onUp?.(); });
+  };
+  holdBtn(els.fire, (id) => { touch.fireId = id; }, null);
+  holdBtn(els.ads, (id) => { touch.adsId = id; }, null);
   if (els.reload) els.reload.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.reload = true; });
   if (els.heal) els.heal.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.heal = true; });
+  if (els.grenade) els.grenade.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.grenade = true; });
 
   function drawJoystick() {
     const j = els.joy;
@@ -126,13 +144,16 @@ export function createInput(canvas, els) {
       dyaw: acc.dyaw,
       dpitch: acc.dpitch,
       fire: mouseFire || !!keys.Space || touch.fireId !== null,
+      ads: mouseAds || !!keys.KeyQ || touch.adsId !== null,
       reload: acc.reload,
       heal: acc.heal,
+      grenade: acc.grenade,
     };
     acc.dyaw = 0;
     acc.dpitch = 0;
     acc.reload = false;
     acc.heal = false;
+    acc.grenade = false;
     return out;
   }
 
@@ -140,5 +161,13 @@ export function createInput(canvas, els) {
     read,
     isLocked: () => locked,
     keys,
+    release() {
+      mouseFire = false;
+      mouseAds = false;
+      touch.move = null;
+      touch.look = null;
+      touch.fireId = null;
+      touch.adsId = null;
+    },
   };
 }

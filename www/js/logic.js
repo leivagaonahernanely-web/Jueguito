@@ -1,7 +1,8 @@
-// Lógica del juego (sin Three.js). Se encarga del mapa, jugadores, bots, balas, zona y botín.
+// Lógica del juego (sin Three.js): mapa, jugadores, bots, balas, granadas, zona y botín.
 import {
-  WORLD, PLAYER_SPEED, BOT_SPEED, PLAYER_RADIUS, BOT_COUNT, HOUSE_COUNT, CRATE_COUNT, TREE_COUNT,
-  LOOT_WEAPONS, LOOT_MEDS, MAX_MEDS, HEAL_AMOUNT, WEAPONS, WEAPON_WEIGHTS, ZONE_PHASES, ZONE_START_RADIUS,
+  WORLD, PLAYER_SPEED, ADS_SPEED_MULT, BOT_SPEED, PLAYER_RADIUS, BOT_COUNT, HOUSE_COUNT, CRATE_COUNT,
+  TREE_COUNT, LOOT_WEAPONS, LOOT_MEDS, LOOT_GRENADES, LOOT_ARMOR, MAX_MEDS, MAX_GRENADES, HEAL_AMOUNT,
+  WEAPONS, WEAPON_WEIGHTS, GRENADE, ZONE_PHASES, ZONE_START_RADIUS,
 } from './config.js';
 
 export const G = {
@@ -10,15 +11,17 @@ export const G = {
   bots: [],
   entities: [],
   obstacles: [],          // { shape:'rect'|'circle', kind, x, z, w,d | r, h, color }
-  loot: [],               // { id, x, z, kind:'weapon'|'med', weapon, lock }
+  loot: [],               // { id, x, z, kind:'weapon'|'med'|'grenade'|'armor', weapon, lock }
   bullets: [],
+  grenades: [],           // { id, x,y,z, vx,vy,vz, t, owner }
   feed: [],
-  events: [],             // eventos para render/HUD: shot, impact, hit, kill
+  events: [],             // shot, impact, hit, hurt, kill, explosion, pickup, headshot, reload, heal, throw
   zone: null,
   elapsed: 0,
   nextId: 1,
   place: 0,
   won: false,
+  playerName: 'Tú',
 };
 
 const HOUSE_COLORS = ['#d7ccc8', '#bcaaa4', '#efebe9', '#ffe0b2', '#c5e1a5', '#b0bec5', '#f8bbd0', '#ffccbc'];
@@ -127,12 +130,13 @@ function freeSpot(r = PLAYER_RADIUS) {
 function makeEntity(p, name, isPlayer, colorIdx) {
   return {
     id: G.nextId++, x: p.x, z: p.z, r: PLAYER_RADIUS, name, isPlayer, colorIdx,
-    hp: 100, alive: true, kills: 0,
+    hp: 100, armor: 0, alive: true, kills: 0,
     weapon: 'pistola', ammo: WEAPONS.pistola.mag, reloadT: 0,
-    meds: 0, cool: 0,
-    yaw: 0, pitch: 0, moving: false, walk: 0, flash: 0,
+    meds: 0, grenades: 0, cool: 0, bloom: 0, healT: 0, throwT: 0, shots: 0,
+    yaw: 0, pitch: 0, moving: false, walk: 0, flash: 0, ads: false,
+    lastKiller: null, lastWeapon: '',
     // IA de bots
-    target: null, goal: null, thinkT: 0,
+    target: null, goal: null, thinkT: 0, grenadeT: 0,
     wanderX: p.x, wanderZ: p.z, wanderT: 0, strafe: Math.random() < 0.5 ? 1 : -1,
   };
 }
@@ -190,12 +194,6 @@ function stepToward(e, tx, tz, speed, dt) {
   moveEnt(e, (dx / len) * speed * dt, (dz / len) * speed * dt);
 }
 
-function aimDirAt(e, tx, ty, tz, noise) {
-  const dx = tx - e.x, dy = ty - 1.35, dz = tz - e.z;
-  const len = Math.hypot(dx, dy, dz) || 1;
-  return normalize({ x: dx / len, y: dy / len, z: dz / len }, noise);
-}
-
 function normalize(d, noise = 0) {
   const x = d.x + rand(-noise, noise);
   const y = d.y + rand(-noise, noise);
@@ -204,14 +202,21 @@ function normalize(d, noise = 0) {
   return { x: x / l, y: y / l, z: z / l };
 }
 
+function aimDirAt(tx, ty, tz, ex, ey, ez) {
+  const dx = tx - ex, dy = ty - ey, dz = tz - ez;
+  const len = Math.hypot(dx, dy, dz) || 1;
+  return { x: dx / len, y: dy / len, z: dz / len };
+}
+
 function aimDirPlayer(p) {
   const cp = Math.cos(p.pitch);
   return { x: Math.sin(p.yaw) * cp, y: Math.sin(p.pitch), z: Math.cos(p.yaw) * cp };
 }
 
-function startReload(e) {
+export function startReload(e) {
   if (!e.alive || e.reloadT > 0 || e.ammo === WEAPONS[e.weapon].mag) return;
   e.reloadT = WEAPONS[e.weapon].reload;
+  G.events.push({ type: 'reload', id: e.id });
 }
 
 function fireWeapon(e, dir) {
@@ -220,34 +225,64 @@ function fireWeapon(e, dir) {
   if (e.ammo <= 0) { startReload(e); return; }
   e.ammo--;
   e.cool = w.rate;
+  e.shots++;
+  e.bloom = Math.min(1.2, e.bloom + w.bloom);
   if (e.ammo === 0) startReload(e);
+
+  const aimMult = e.ads ? 0.35 : 1;
+  const moveMult = e.isPlayer && e.moving ? 1.6 : 1;
+  const spread = w.spread * aimMult * moveMult + e.bloom * 0.04 * aimMult;
 
   const ox = e.x + dir.x * 0.6;
   const oy = 1.35 + dir.y * 0.6;
   const oz = e.z + dir.z * 0.6;
   for (let i = 0; i < w.pellets; i++) {
-    const d = normalize(dir, w.spread);
+    const d = normalize(dir, spread);
     G.bullets.push({
       x: ox, y: oy, z: oz,
       vx: d.x * w.speed, vy: d.y * w.speed, vz: d.z * w.speed,
       traveled: 0, range: w.range, dmg: w.dmg, owner: e, weapon: e.weapon,
     });
   }
-  G.events.push({ type: 'shot', x: ox, y: oy, z: oz, weapon: e.weapon });
+  if (e.isPlayer) e.pitch = clamp(e.pitch + w.recoil * (e.ads ? 0.5 : 1), -0.9, 0.9);
+  G.events.push({ type: 'shot', id: e.id, x: ox, y: oy, z: oz, weapon: e.weapon, dir });
 }
 
-function useMed(e) {
-  if (!e.alive || e.meds <= 0 || e.hp >= 100) return;
+export function throwGrenade(e, dir) {
+  if (!e.alive || e.grenades <= 0 || e.throwT > 0) return;
+  e.grenades--;
+  e.throwT = 0.45;
+  G.grenades.push({
+    id: G.nextId++,
+    x: e.x + dir.x * 0.5, y: 1.5 + dir.y * 0.5, z: e.z + dir.z * 0.5,
+    vx: dir.x * GRENADE.speed, vy: dir.y * GRENADE.speed + 3, vz: dir.z * GRENADE.speed,
+    t: GRENADE.fuse, owner: e,
+  });
+  G.events.push({ type: 'throw', id: e.id });
+}
+
+export function useMed(e) {
+  if (!e.alive || e.meds <= 0 || e.hp >= 100 || e.healT > 0) return;
   e.meds--;
+  e.healT = 1.1;
+  G.events.push({ type: 'heal', id: e.id });
   e.hp = Math.min(100, e.hp + HEAL_AMOUNT);
 }
 
-function damage(e, amt, src) {
+function damage(e, amt, src, label = '', head = false) {
   if (!e.alive) return;
+  if (e.armor > 0) {
+    const a = Math.min(e.armor, amt * 0.6);
+    e.armor -= a;
+    amt -= a;
+  }
   e.hp -= amt;
-  e.flash = 0.12;
-  if (src && src.isPlayer && e !== src) G.events.push({ type: 'hit', victim: e.id });
-  if (e.hp <= 0) kill(e, src);
+  e.flash = 0.14;
+  e.lastKiller = src ? src.name : '';
+  e.lastWeapon = label;
+  if (e.isPlayer && src !== e) G.events.push({ type: 'hurt', amt });
+  if (src && src.isPlayer && e !== src) G.events.push({ type: 'hit', victim: e.id, head });
+  if (e.hp <= 0) kill(e, src, label);
 }
 
 function addFeed(text) {
@@ -255,22 +290,27 @@ function addFeed(text) {
   if (G.feed.length > 6) G.feed.shift();
 }
 
-function kill(e, src) {
+function kill(e, src, label) {
   e.hp = 0;
   e.alive = false;
   if (e.weapon !== 'pistola') G.loot.push({ id: G.nextId++, x: e.x, z: e.z, kind: 'weapon', weapon: e.weapon, lock: 0 });
   for (let i = 0; i < e.meds; i++) {
     G.loot.push({ id: G.nextId++, x: e.x + rand(-0.8, 0.8), z: e.z + rand(-0.8, 0.8), kind: 'med', lock: 0 });
   }
+  for (let i = 0; i < e.grenades; i++) {
+    G.loot.push({ id: G.nextId++, x: e.x + rand(-0.8, 0.8), z: e.z + rand(-0.8, 0.8), kind: 'grenade', lock: 0 });
+  }
+  if (e.armor > 0) G.loot.push({ id: G.nextId++, x: e.x, z: e.z, kind: 'armor', lock: 0 });
+
   let msg;
   if (src && src !== e) {
     src.kills++;
-    msg = `${src.name} eliminó a ${e.name}`;
+    msg = `${src.name} ➜ ${e.name}  (${label})`;
   } else {
-    msg = `${e.name} fue eliminado por la zona`;
+    msg = `${e.name} eliminado por la zona`;
   }
   addFeed(msg);
-  G.events.push({ type: 'kill', victim: e.id });
+  G.events.push({ type: 'kill', victim: e.id, killer: src ? src.id : 0 });
   if (e.isPlayer) endGame(false);
 }
 
@@ -282,17 +322,71 @@ function tryPickup(e) {
     if (it.kind === 'med') {
       if (e.meds >= MAX_MEDS) continue;
       e.meds++;
-      G.loot.splice(i, 1);
+    } else if (it.kind === 'grenade') {
+      if (e.grenades >= MAX_GRENADES) continue;
+      e.grenades++;
+    } else if (it.kind === 'armor') {
+      if (e.armor >= (e.isPlayer ? 100 : 50)) continue;
+      e.armor = Math.min(100, e.armor + 50);
     } else {
       const cur = e.weapon, want = it.weapon;
-      const ok = e.isPlayer ? want !== cur : WEAPONS[want].rank > WEAPONS[cur].rank;
-      if (!ok) continue;
-      G.loot.splice(i, 1);
-      // El arma anterior queda en el suelo, bloqueada un momento para no recogerla de nuevo
-      G.loot.push({ id: G.nextId++, x: e.x, z: e.z, kind: 'weapon', weapon: cur, lock: 1.5 });
-      e.weapon = want;
-      e.ammo = WEAPONS[want].mag;
-      e.reloadT = 0;
+      if (e.isPlayer && want === cur) {
+        e.ammo = WEAPONS[want].mag;
+        e.reloadT = 0;
+      } else {
+        const better = WEAPONS[want].rank > WEAPONS[cur].rank;
+        if (!e.isPlayer && !better) continue;
+        // El arma anterior queda en el suelo, bloqueada un momento para no recogerla de nuevo
+        G.loot.push({ id: G.nextId++, x: e.x, z: e.z, kind: 'weapon', weapon: cur, lock: 1.5 });
+        e.weapon = want;
+        e.ammo = WEAPONS[want].mag;
+        e.reloadT = 0;
+      }
+    }
+    G.loot.splice(i, 1);
+    if (e.isPlayer) G.events.push({ type: 'pickup', kind: it.kind, weapon: it.weapon });
+  }
+}
+
+// ---------- Granadas ----------
+function updateGrenades(dt) {
+  for (let i = G.grenades.length - 1; i >= 0; i--) {
+    const g = G.grenades[i];
+    g.vy -= 15 * dt;
+    const n = 4;
+    for (let s = 0; s < n; s++) {
+      const px = g.x, pz = g.z;
+      g.x += (g.vx * dt) / n;
+      g.y += (g.vy * dt) / n;
+      g.z += (g.vz * dt) / n;
+      if (blockedAt(g.x, g.y, g.z)) {
+        if (!blockedAt(g.x, g.y, pz)) { g.z = pz; g.vz *= -0.35; }
+        else if (!blockedAt(px, g.y, g.z)) { g.x = px; g.vx *= -0.35; }
+        else { g.x = px; g.z = pz; g.vx *= -0.3; g.vz *= -0.3; }
+      }
+      if (g.y < 0.12) {
+        g.y = 0.12;
+        g.vy = -g.vy * 0.35;
+        g.vx *= 0.7;
+        g.vz *= 0.7;
+      }
+    }
+    g.t -= dt;
+    if (g.t <= 0) {
+      explode(g);
+      G.grenades.splice(i, 1);
+    }
+  }
+}
+
+function explode(g) {
+  G.events.push({ type: 'explosion', x: g.x, y: g.y, z: g.z, radius: GRENADE.radius });
+  for (const e of G.entities) {
+    if (!e.alive) continue;
+    const d = Math.hypot(e.x - g.x, e.z - g.z, 0.9 - g.y);
+    if (d < GRENADE.radius) {
+      const amt = GRENADE.dmg * (1 - d / GRENADE.radius) * (1 - d / GRENADE.radius * 0.3);
+      damage(e, amt, g.owner, 'Granada');
     }
   }
 }
@@ -347,20 +441,23 @@ function updateBullets(dt) {
       b.z += (b.vz * dt) / n;
       b.traveled += step / n;
       if (b.traveled > b.range || b.y < 0 || b.x < 0 || b.z < 0 || b.x > WORLD || b.z > WORLD) {
-        G.events.push({ type: 'impact', x: b.x, y: Math.max(0, b.y), z: b.z });
+        G.events.push({ type: 'impact', x: b.x, y: Math.max(0, b.y), z: b.z, ground: true });
         gone = true;
         break;
       }
       if (blockedAt(b.x, b.y, b.z)) {
-        G.events.push({ type: 'impact', x: b.x, y: b.y, z: b.z });
+        G.events.push({ type: 'impact', x: b.x, y: b.y, z: b.z, ground: false });
         gone = true;
         break;
       }
       for (const e of G.entities) {
         if (!e.alive || e === b.owner) continue;
         if (Math.hypot(b.x - e.x, b.z - e.z) < e.r + 0.15 && b.y > 0 && b.y < 1.85) {
-          damage(e, b.dmg, b.owner);
-          G.events.push({ type: 'impact', x: b.x, y: b.y, z: b.z });
+          const head = b.y > 1.5;
+          const label = WEAPONS[b.weapon].name;
+          damage(e, b.dmg * (head ? 1.8 : 1), b.owner, label, head);
+          if (head && b.owner.isPlayer) G.events.push({ type: 'headshot' });
+          G.events.push({ type: 'impact', x: b.x, y: b.y, z: b.z, ground: false, flesh: true });
           gone = true;
           break;
         }
@@ -376,17 +473,20 @@ function updatePlayer(dt, input) {
   if (!p.alive) return;
   p.yaw += input.dyaw;
   p.pitch = clamp(p.pitch + input.dpitch, -0.9, 0.9);
+  p.ads = !!input.ads;
 
   let fwd = input.forward, str = input.strafe;
   const m = Math.hypot(fwd, str);
   if (m > 1) { fwd /= m; str /= m; }
+  const speed = PLAYER_SPEED * (p.ads ? ADS_SPEED_MULT : 1);
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const rx = -fz, rz = fx;
-  moveEnt(p, (fx * fwd + rx * str) * PLAYER_SPEED * dt, (fz * fwd + rz * str) * PLAYER_SPEED * dt);
+  moveEnt(p, (fx * fwd + rx * str) * speed * dt, (fz * fwd + rz * str) * speed * dt);
 
   if (input.fire) fireWeapon(p, aimDirPlayer(p));
   if (input.reload) startReload(p);
   if (input.heal) useMed(p);
+  if (input.grenade) throwGrenade(p, aimDirPlayer(p));
   tryPickup(p);
 }
 
@@ -410,7 +510,7 @@ function updateBot(b, dt) {
     b.goal = null;
     if (!b.target) {
       const w = WEAPONS[b.weapon];
-      if (w.rank < 3 || b.meds < 2) {
+      if (w.rank < 4 || b.meds < 2) {
         let bestL = 40;
         for (const it of G.loot) {
           if (it.lock > 0) continue;
@@ -437,9 +537,16 @@ function updateBot(b, dt) {
       const perp = b.yaw + (Math.PI / 2) * b.strafe;
       moveEnt(b, Math.cos(perp) * 2.4 * dt, Math.sin(perp) * 2.4 * dt);
     }
+    // Granadas contra enemigos a media distancia
+    b.grenadeT -= dt;
+    if (b.grenades > 0 && d > 12 && d < 24 && b.grenadeT <= 0 && Math.random() < dt * 0.4) {
+      b.grenadeT = 6;
+      const dir = aimDirAt(t.x, 0.9, t.z, b.x, 1.4, b.z);
+      throwGrenade(b, { x: dir.x, y: 0.35, z: dir.z });
+    }
     if (d < w.range * 0.85) {
       const noise = w.pellets > 1 ? 0.03 : 0.075 + d * 0.0009;
-      fireWeapon(b, aimDirAt(b, t.x, 1.0, t.z, noise));
+      fireWeapon(b, normalize(aimDirAt(t.x, 1.0, t.z, b.x, 1.35, b.z), noise));
     }
   } else if (outsideZone) {
     stepToward(b, G.zone.cx, G.zone.cz, BOT_SPEED, dt);
@@ -460,12 +567,14 @@ function updateBot(b, dt) {
 }
 
 // ---------- Partida ----------
-export function startMatch() {
+export function startMatch(name = 'Tú') {
   G.nextId = 1;
+  G.playerName = name || 'Tú';
   genMap();
   G.bots = [];
   G.loot = [];
   G.bullets = [];
+  G.grenades = [];
   G.feed = [];
   G.events = [];
   G.elapsed = 0;
@@ -473,21 +582,27 @@ export function startMatch() {
   G.place = 0;
 
   const ps = freeSpot();
-  G.player = makeEntity(ps, 'Tú', true, 0);
+  G.player = makeEntity(ps, G.playerName, true, 0);
+  G.player.grenades = 1;
   for (let i = 0; i < BOT_COUNT; i++) {
     const s = freeSpot();
     G.bots.push(makeEntity(s, `Bot ${i + 1}`, false, 1 + (i % 7)));
   }
   G.entities = [G.player, ...G.bots];
 
+  const addLoot = (kind, count, extra = {}) => {
+    for (let i = 0; i < count; i++) {
+      const s = freeSpot(0.6);
+      G.loot.push({ id: G.nextId++, x: s.x, z: s.z, kind, lock: 0, ...extra });
+    }
+  };
   for (let i = 0; i < LOOT_WEAPONS; i++) {
     const s = freeSpot(0.6);
     G.loot.push({ id: G.nextId++, x: s.x, z: s.z, kind: 'weapon', weapon: pickWeaponKey(), lock: 0 });
   }
-  for (let i = 0; i < LOOT_MEDS; i++) {
-    const s = freeSpot(0.6);
-    G.loot.push({ id: G.nextId++, x: s.x, z: s.z, kind: 'med', lock: 0 });
-  }
+  addLoot('med', LOOT_MEDS);
+  addLoot('grenade', LOOT_GRENADES);
+  addLoot('armor', LOOT_ARMOR);
 
   G.zone = {
     phase: 0, state: 'hold', t: 0,
@@ -516,6 +631,9 @@ export function update(dt, input) {
     e.moving = false;
     if (e.cool > 0) e.cool -= dt;
     if (e.flash > 0) e.flash -= dt;
+    if (e.healT > 0) e.healT -= dt;
+    if (e.throwT > 0) e.throwT -= dt;
+    e.bloom = Math.max(0, e.bloom - dt * 2.4);
     if (e.reloadT > 0) {
       e.reloadT -= dt;
       if (e.reloadT <= 0) {
@@ -529,12 +647,13 @@ export function update(dt, input) {
   updateZone(dt);
   for (const e of G.entities) {
     if (!e.alive) continue;
-    if (Math.hypot(e.x - G.zone.cx, e.z - G.zone.cz) > G.zone.radius) damage(e, zoneDps() * dt, null);
+    if (Math.hypot(e.x - G.zone.cx, e.z - G.zone.cz) > G.zone.radius) damage(e, zoneDps() * dt, null, 'Zona');
   }
 
   updatePlayer(dt, input);
   for (const b of G.bots) if (b.alive) updateBot(b, dt);
   updateBullets(dt);
+  updateGrenades(dt);
 
   for (const e of G.entities) if (e.moving) e.walk += dt * 9;
 

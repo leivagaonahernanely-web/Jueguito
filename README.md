@@ -20,23 +20,23 @@ Abre la dirección que muestre (por ejemplo `http://localhost:3000`).
 **Controles PC**
 
 - `WASD`: moverse
-- Ratón: mirar (haz clic en la pantalla para capturar el ratón; `Esc` lo libera)
-- Clic izquierdo o `Espacio`: disparar
-- `R`: recargar
-- `H`: usar botiquín (+35 de vida)
+- Ratón: mirar (clic en la pantalla para capturar el ratón; `Esc` pausa)
+- Clic izquierdo o `Espacio`: disparar (mantén para armas automáticas)
+- Clic derecho o `Q`: apuntar (mirilla más precisa)
+- `R`: recargar · `H`: botiquín · `G`: granada
 
 **Controles celular**
 
 - Joystick izquierdo (mitad izquierda): moverse
 - Arrastrar en la mitad derecha: mirar
-- Botón **DISPARAR**, **RECARGAR** y **+** (curar)
+- Botones: DISPARAR, APUNTAR, recargar (R), curar (+) y granada (💣)
 
-## Reglas
+## Reglas y armas
 
-- 30 jugadores (tú + 29 bots).
-- La zona se cierra por fases. Fuera de ella pierdes vida cada segundo.
-- Armas: Pistola, Escopeta, Rifle y Francotirador, cada una con daño, cadencia, alcance y cargador distintos.
-- Al pasar sobre un arma o botiquín en el suelo, lo recoges. Tu arma anterior queda en el suelo.
+- 30 jugadores (tú + 29 bots). La zona se cierra por fases y daña fuera de ella.
+- Armas: Pistola, Subfusil, Escopeta, Rifle de asalto y Francotirador. Cada una con daño, cadencia, alcance y retroceso distintos. Los disparos a la cabeza hacen más daño.
+- Granadas con radio de explosión, chalecos que absorben daño y botiquines.
+- Al pasar sobre un objeto en el suelo lo recoges. Tu arma anterior queda en el suelo.
 - Ganas si eres el último con vida.
 
 ## Generar el APK para Android

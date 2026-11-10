@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Battle royale 3D para navegador y Android (APK)",
   "scripts": {
-    "copy-three": "mkdir -p www/lib && cp node_modules/three/build/*.js www/lib/",
+    "copy-three": "mkdir -p www/lib && cp node_modules/three/build/*.js www/lib/ && rm -rf www/lib/addons && cp -r node_modules/three/examples/jsm www/lib/addons",
     "sync": "npm run copy-three && cap sync android",
     "build:apk": "npm run sync && cd android && ./gradlew assembleDebug",
     "serve": "npx --yes serve www"

@@ -3,62 +3,146 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#1b2a1b">
+  <meta name="theme-color" content="#0b1020">
   <title>Battle Royale 3D</title>
   <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./lib/three.module.js",
+        "three/addons/": "./lib/addons/"
+      }
+    }
+  </script>
 </head>
 <body>
   <canvas id="game"></canvas>
 
   <div id="damage"></div>
-  <div id="crosshair"><span></span></div>
   <div id="hitmarker"></div>
+  <div id="cross" class="cross">
+    <span class="l"></span><span class="r"></span><span class="t"></span><span class="b"></span><span class="dot"></span>
+  </div>
 
-  <div id="hud">
+  <!-- HUD -->
+  <div id="hud" class="hidden">
     <div id="top">
       <div class="pill" id="alive">Vivos: 0</div>
       <div class="pill" id="zone">Zona</div>
       <div class="pill" id="kills">Bajas: 0</div>
     </div>
     <div id="feed"></div>
+    <canvas id="minimap" width="170" height="170"></canvas>
 
     <div id="bottom">
-      <div id="hpbar">
-        <div id="hpfill"></div>
-        <span id="hptext">100</span>
+      <div class="bar hp"><div id="hpfill"></div><span id="hptext">100</span></div>
+      <div class="bar armor"><div id="armorfill"></div></div>
+      <div id="weaponbox">
+        <div id="weapon">Pistola</div>
+        <div id="ammo">12/12</div>
+        <div id="reloadbar"><div id="reloadfill"></div></div>
       </div>
-      <div id="info">
-        <span id="weapon">Pistola</span>
-        <span id="ammo"></span>
-        <span class="sep">•</span>
-        <span>🩹</span> <span id="meds">0</span>
+      <div id="items">
+        <span class="item">💣 <b id="grenades">0</b></span>
+        <span class="item">🩹 <b id="meds">0</b></span>
       </div>
     </div>
 
     <div id="joy"><div id="joyKnob"></div></div>
     <button class="btn" id="btnFire">DISPARAR</button>
-    <button class="btn" id="btnReload">RECARGAR</button>
+    <button class="btn" id="btnAds">APUNTAR</button>
+    <button class="btn" id="btnReload">R</button>
     <button class="btn" id="btnHeal">+</button>
+    <button class="btn" id="btnGrenade">💣</button>
   </div>
 
+  <div id="countdown" class="overlay hidden"><div id="countText">3</div></div>
+
+  <!-- Menú principal -->
   <div id="menu" class="overlay">
     <div class="menu-inner">
       <p class="tag">BATTLE ROYALE</p>
       <h1>3D</h1>
-      <p class="sub">Sé el último en pie.</p>
+      <p class="sub">Sé el último en pie</p>
+      <label class="field">
+        Tu nombre
+        <input id="name" maxlength="14" placeholder="Tú" autocomplete="off">
+      </label>
       <button id="play" class="cta">JUGAR</button>
-      <p class="small">
-        <b>PC:</b> WASD mover · ratón mirar · clic disparar · R recargar · H curar<br>
-        <b>Celular:</b> joystick izquierdo mover · arrastra en la derecha para mirar · botón DISPARAR · + curar
-      </p>
+      <div class="row">
+        <button id="openControls" class="ghost">Controles</button>
+        <button id="openSettings" class="ghost">Ajustes</button>
+      </div>
+      <p class="small">30 jugadores · zona que se cierra · armas, granadas y chalecos</p>
     </div>
   </div>
 
+  <!-- Ajustes -->
+  <div id="settings" class="overlay hidden">
+    <div class="menu-inner panel">
+      <h2>AJUSTES</h2>
+      <label class="field">Sensibilidad del ratón / pantalla <span id="sensVal"></span>
+        <input id="sens" type="range" min="0.3" max="2.5" step="0.05">
+      </label>
+      <label class="field">Volumen <span id="volVal"></span>
+        <input id="vol" type="range" min="0" max="1" step="0.05">
+      </label>
+      <label class="field">Calidad gráfica
+        <select id="quality">
+          <option value="alta">Alta (sombras y brillo)</option>
+          <option value="baja">Baja (más fluido)</option>
+        </select>
+      </label>
+      <button id="backSettings" class="ghost">Volver</button>
+    </div>
+  </div>
+
+  <!-- Controles -->
+  <div id="controls" class="overlay hidden">
+    <div class="menu-inner panel">
+      <h2>CONTROLES</h2>
+      <div class="ctl-grid">
+        <b>PC</b><span></span>
+        <span>Mover</span><span>W A S D</span>
+        <span>Mirar</span><span>Ratón (clic en la pantalla para capturarlo)</span>
+        <span>Disparar</span><span>Clic izquierdo o Espacio</span>
+        <span>Apuntar</span><span>Clic derecho o Q</span>
+        <span>Recargar</span><span>R</span>
+        <span>Curar</span><span>H</span>
+        <span>Granada</span><span>G</span>
+        <span>Pausa</span><span>Esc</span>
+        <b>Celular</b><span></span>
+        <span>Mover</span><span>Joystick izquierdo</span>
+        <span>Mirar</span><span>Arrastra en la mitad derecha</span>
+        <span>Disparar / apuntar / curar / granada</span><span>Botones de la derecha</span>
+      </div>
+      <button id="backControls" class="ghost">Volver</button>
+    </div>
+  </div>
+
+  <!-- Pausa -->
+  <div id="pause" class="overlay hidden">
+    <div class="menu-inner">
+      <h1 class="small-h">PAUSA</h1>
+      <button id="resume" class="cta">SEGUIR</button>
+      <button id="toMenuPause" class="ghost">Salir al menú</button>
+    </div>
+  </div>
+
+  <!-- Fin de partida -->
   <div id="end" class="overlay hidden">
     <div class="menu-inner">
       <h1 id="endTitle"></h1>
       <p id="endText"></p>
       <button id="again" class="cta">JUGAR OTRA VEZ</button>
+      <button id="toMenuEnd" class="ghost">Menú principal</button>
+    </div>
+  </div>
+
+  <div id="fatal" class="overlay hidden">
+    <div class="menu-inner">
+      <h2>No se pudo iniciar el juego</h2>
+      <p id="fatalText"></p>
     </div>
   </div>
 
