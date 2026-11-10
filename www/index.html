@@ -2,20 +2,26 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Battle Royale</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1b2a1b">
+  <title>Battle Royale 3D</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <canvas id="game"></canvas>
 
+  <div id="damage"></div>
+  <div id="crosshair"><span></span></div>
+  <div id="hitmarker"></div>
+
   <div id="hud">
     <div id="top">
-      <span id="alive">Vivos: 0</span>
-      <span id="zone">Zona</span>
-      <span id="kills">Bajas: 0</span>
+      <div class="pill" id="alive">Vivos: 0</div>
+      <div class="pill" id="zone">Zona</div>
+      <div class="pill" id="kills">Bajas: 0</div>
     </div>
     <div id="feed"></div>
+
     <div id="bottom">
       <div id="hpbar">
         <div id="hpfill"></div>
@@ -24,28 +30,38 @@
       <div id="info">
         <span id="weapon">Pistola</span>
         <span id="ammo"></span>
-        <span class="sep">|</span>
-        Botiquines: <span id="meds">0</span>
+        <span class="sep">•</span>
+        <span>🩹</span> <span id="meds">0</span>
       </div>
     </div>
+
+    <div id="joy"><div id="joyKnob"></div></div>
+    <button class="btn" id="btnFire">DISPARAR</button>
+    <button class="btn" id="btnReload">RECARGAR</button>
+    <button class="btn" id="btnHeal">+</button>
   </div>
 
   <div id="menu" class="overlay">
-    <h1>BATTLE ROYALE</h1>
-    <p>Sé el último en pie.</p>
-    <button id="play">JUGAR</button>
-    <p class="small">
-      PC: WASD mover · ratón apuntar y disparar · R recargar · H botiquín<br>
-      Móvil: joystick izquierdo mover · joystick derecho apuntar y disparar · botón + curar
-    </p>
+    <div class="menu-inner">
+      <p class="tag">BATTLE ROYALE</p>
+      <h1>3D</h1>
+      <p class="sub">Sé el último en pie.</p>
+      <button id="play" class="cta">JUGAR</button>
+      <p class="small">
+        <b>PC:</b> WASD mover · ratón mirar · clic disparar · R recargar · H curar<br>
+        <b>Celular:</b> joystick izquierdo mover · arrastra en la derecha para mirar · botón DISPARAR · + curar
+      </p>
+    </div>
   </div>
 
   <div id="end" class="overlay hidden">
-    <h1 id="endTitle"></h1>
-    <p id="endText"></p>
-    <button id="again">Jugar otra vez</button>
+    <div class="menu-inner">
+      <h1 id="endTitle"></h1>
+      <p id="endText"></p>
+      <button id="again" class="cta">JUGAR OTRA VEZ</button>
+    </div>
   </div>
 
-  <script src="game.js"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

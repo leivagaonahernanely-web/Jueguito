@@ -23,22 +23,23 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Preparar Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Instalar dependencias y copiar Three.js
+        run: |
+          npm install
+          npm run copy-three
 
-      - name: Instalar dependencias
-        run: npm install
-
-      - name: Generar proyecto Android (solo si no existe)
+      - name: Generar proyecto Android (solo si no existe) y sincronizar
         run: |
           if [ ! -d android ]; then npx cap add android; fi
           npx cap sync android
 
       - name: Compilar APK de depuración
         working-directory: android
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-daemon
 
       - name: Subir APK
         uses: actions/upload-artifact@v4

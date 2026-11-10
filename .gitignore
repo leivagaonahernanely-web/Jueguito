@@ -1,6 +1,7 @@
 node_modules/
 android/
 ios/
+www/lib/
 .DS_Store
 *.apk
 *.aab
