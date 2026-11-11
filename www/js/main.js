@@ -1,6 +1,6 @@
 // Punto de entrada: menús, ajustes, bucle principal, HUD, mira, minimapa y sonido.
 import { G, genMap, startMatch, update, zoneText } from './logic.js';
-import { createView } from './render.js';
+import { createView, createLobbyPreview } from './render.js';
 import { createInput } from './input.js';
 import * as SFX from './audio.js';
 import { WORLD, WEAPONS, MAX_MEDS, MAX_GRENADES, ZONE_PHASES, CHARACTERS, CHARACTER_IDS, SKILLS } from './config.js';
@@ -21,6 +21,7 @@ const els = {
   swap: $('btnSwap'), glooBtn: $('btnGloo'), slot2: $('slot2'), gloo: $('glooCount'),
   skill: $('btnSkill'), skillCd: $('skillCd'), car: $('btnCar'), carLbl: $('carLbl'),
   skillInfo: $('skillInfo'),
+  lobbyPreview: $('lobbyPreview'), profName: $('profName'), statMatches: $('statMatches'), statWins: $('statWins'), statKills: $('statKills'),
   lobby: $('lobby'), lobbyCount: $('lobbyCount'), lobbyStatus: $('lobbyStatus'), charGrid: $('charGrid'),
   charInfo: $('charInfo'), lobbyPlayers: $('lobbyPlayers'), lobbyStart: $('lobbyStart'), lobbyBack: $('lobbyBack'),
   countdown: $('countdown'), countText: $('countText'),
@@ -119,6 +120,21 @@ function showMenu() {
 
 // Los ajustes se pueden abrir desde el menú principal o desde la pausa
 let settingsFrom = 'menu';
+
+// Perfil estilo Free Fire: nombre, partidas, victorias y bajas guardadas en el equipo
+let stats = { matches: 0, wins: 0, kills: 0 };
+try { stats = { ...stats, ...JSON.parse(localStorage.getItem('br3d_stats') || '{}') }; } catch (_) { /* sin almacenamiento */ }
+function saveStats() { try { localStorage.setItem('br3d_stats', JSON.stringify(stats)); } catch (_) { /* sin almacenamiento */ } }
+function refreshProfile() {
+  if (els.profName) els.profName.value = settings.name || '';
+  if (els.statMatches) els.statMatches.textContent = stats.matches;
+  if (els.statWins) els.statWins.textContent = stats.wins;
+  if (els.statKills) els.statKills.textContent = stats.kills;
+}
+els.profName?.addEventListener('input', () => {
+  settings.name = els.profName.value.trim().slice(0, 14);
+  saveSettings();
+});
 els.openSettings.addEventListener('click', () => { settingsFrom = 'menu'; hide(els.menu); show(els.settings); });
 els.openSettingsPause.addEventListener('click', () => { settingsFrom = 'pause'; hide(els.pause); show(els.settings); });
 els.backSettings.addEventListener('click', () => {
@@ -279,6 +295,9 @@ function renderCharCards() {
 function showCharInfo() {
   const ch = CHARACTERS[settings.char];
   const cid = CHARACTER_IDS.find((k) => CHARACTERS[k] === ch) || 'recluta';
+  settings.char = cid;
+  saveSettings();
+  refreshPreview();
   const sk = SKILLS[cid];
   els.charInfo.textContent = `${ch.name}: ${ch.desc} (vida ${ch.hp})`;
   if (els.skillInfo) {
@@ -290,6 +309,24 @@ function showCharInfo() {
     }
   }
 }
+
+// Vista previa 3D del personaje elegido, con emotes al estilo Free Fire
+let lobbyPreviewView = null;
+function ensureLobbyPreview() {
+  if (!els.lobbyPreview || lobbyPreviewView) return;
+  lobbyPreviewView = createLobbyPreview(els.lobbyPreview);
+  lobbyPreviewView.setChar(CHARACTERS[settings.char]?.look, settings.char);
+}
+function refreshPreview() {
+  if (lobbyPreviewView) lobbyPreviewView.setChar(CHARACTERS[settings.char]?.look, settings.char);
+}
+document.querySelectorAll('.emote-btn').forEach((b) => {
+  b.addEventListener('click', () => {
+    ensureLobbyPreview();
+    lobbyPreviewView?.playEmote(b.dataset.emote);
+    if (b.dataset.emote === 'saludo') SFX.playPickup();
+  });
+});
 
 function renderLobbyPlayers() {
   els.lobbyPlayers.textContent = '';
@@ -303,6 +340,9 @@ function renderLobbyPlayers() {
 }
 
 function openLobby() {
+  ensureLobbyPreview();
+  lobbyPreviewView?.setVisible(true);
+  refreshProfile();
   stopLobby();
   hide(els.menu); hide(els.end); hide(els.settings); hide(els.controls); hide(els.pause);
   show(els.lobby);
@@ -332,6 +372,7 @@ function openLobby() {
 function startFromLobby() {
   stopLobby();
   hide(els.lobby);
+  lobbyPreviewView?.setVisible(false);
   startGame();
 }
 
@@ -374,6 +415,11 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 function showEnd() {
+  stats.matches++;
+  if (G.won) stats.wins++;
+  stats.kills += G.player?.kills ?? 0;
+  saveStats();
+  refreshProfile();
   els.endTitle.textContent = G.won ? '¡BOOYAH!' : 'ELIMINADO';
   const kills = G.player ? G.player.kills : 0;
   els.endText.textContent = `Puesto #${G.place} de ${G.entities.length} · Bajas: ${kills}`;

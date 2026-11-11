@@ -100,6 +100,24 @@
         <div id="lobbyStatus">Esperando a más jugadores…</div>
       </div>
       <h2>ELIGE TU PERSONAJE</h2>
+      <div class="lobby-showcase">
+        <div class="preview-wrap">
+          <canvas id="lobbyPreview" width="240" height="300"></canvas>
+          <div class="emote-row">
+            <button class="emote-btn" data-emote="saludo" title="Saludar">👋</button>
+            <button class="emote-btn" data-emote="baile" title="Bailar">💃</button>
+            <button class="emote-btn" data-emote="senal" title="Señalar">👉</button>
+            <button class="emote-btn" data-emote="flexion" title="Flexionar">💪</button>
+          </div>
+        </div>
+        <div class="profile-card">
+          <div class="profile-head">PERFIL</div>
+          <input id="profName" maxlength="14" placeholder="Tu nombre">
+          <div class="stat-line"><span>Partidas</span><b id="statMatches">0</b></div>
+          <div class="stat-line"><span>Victorias</span><b id="statWins">0</b></div>
+          <div class="stat-line"><span>Bajas</span><b id="statKills">0</b></div>
+        </div>
+      </div>
       <div id="charGrid" class="char-grid"></div>
       <div id="charInfo" class="char-info"></div>
       <div id="skillInfo" class="skill-info hidden"></div>

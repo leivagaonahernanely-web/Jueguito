@@ -1061,6 +1061,35 @@ export function createView(canvas) {
       root.add(ring);
     }
 
+    // Accesorios por personaje (piezas simples, sin dibujar texturas)
+    const charId = e.charId || e.id_char || null;
+    const lookId = charId || (e.isPlayer ? null : null);
+    if (charId === 'tanque' || (e.look && e.look.gear === 'tanque')) {
+      const pack = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.2), new THREE.MeshStandardMaterial({ color: 0x37412a, roughness: 0.85 }));
+      const spine = model.getObjectByName('Spine2');
+      if (spine) { pack.position.set(0, 0.05, -0.24); pack.castShadow = true; spine.add(pack); }
+    }
+    if (charId === 'medico' || (e.look && e.look.gear === 'medico')) {
+      const spine = model.getObjectByName('Spine2');
+      if (spine) {
+        const mat = new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.6 });
+        const a = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.02), mat);
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.02), mat);
+        a.position.set(0, 0.1, 0.14); b.position.set(0, 0.1, 0.14);
+        spine.add(a, b);
+      }
+    }
+    if (charId === 'explorador' || (e.look && e.look.gear === 'explorador')) {
+      const head = model.getObjectByName('Head');
+      if (head) {
+        const capMat = new THREE.MeshStandardMaterial({ color: 0xfb8c00, roughness: 0.7 });
+        const cup = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2.4), capMat);
+        const brim = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 0.1), capMat);
+        cup.position.y = 0.02; brim.position.set(0, 0.015, 0.12);
+        head.add(cup, brim);
+      }
+    }
+
     const wing = addGlider(root, topColor);
     return {
       root, body, legs: [], arms: [], vest: { visible: false }, shirtMat: null, gunPivot, guns, ring, wing,
@@ -1956,4 +1985,121 @@ export function createView(canvas) {
 
   loadAvatar();
   return { render, reset, resize, buildWorld, loadPost, applyQuality, get lamps() { return lampRefs; } };
+}
+
+// ----- Vista previa del lobby (estilo Free Fire): personaje en 3D con emotes -----
+export function createLobbyPreview(canvas) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 20);
+  camera.position.set(0, 1.15, 2.9);
+  camera.lookAt(0, 0.95, 0);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+  const dl = new THREE.DirectionalLight(0xfff3d6, 1.6);
+  dl.position.set(2, 4, 3);
+  scene.add(dl);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(1.5, 32), new THREE.MeshStandardMaterial({ color: 0x2a3341, roughness: 0.9 }));
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
+  const podium = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.85, 0.12, 28), new THREE.MeshStandardMaterial({ color: 0x3a4657, roughness: 0.6, metalness: 0.3 }));
+  podium.position.y = 0.06;
+  scene.add(podium);
+
+  let model = null, bones = null, look = null, emote = null, emoteT = 0, spin = 0, visible = true;
+  const loader = new GLTFLoader();
+
+  function build(lookIn, charId) {
+    if (model) scene.remove(model);
+    look = lookIn;
+    loader.loadAsync('assets/avatar.glb').then((av) => {
+      model = SkeletonUtils.clone(av.scene);
+      const box = new THREE.Box3().setFromObject(model);
+      const sc = 1.8 / (box.max.y - box.min.y);
+      model.scale.setScalar(sc);
+      model.position.y = -box.min.y * sc + 0.12;
+      model.traverse((o) => {
+        if (!o.isMesh) return;
+        o.material = o.material.clone();
+        const n = o.material.name;
+        if (n === 'Wolf3D_Outfit_Top' && look) o.material.color.set(look.shirt ?? 0x1e88e5);
+        else if (n === 'Wolf3D_Outfit_Bottom' && look) o.material.color.set(look.pants ?? 0x2b3a46);
+        else if (n === 'Wolf3D_Headwear' && look) o.material.color.set(look.helmet ?? look.hair ?? 0x333333);
+      });
+      bones = {};
+      for (const n of ['Hips', 'Spine', 'Spine1', 'RightArm', 'LeftArm', 'RightForeArm', 'LeftForeArm']) {
+        const b = model.getObjectByName(n);
+        if (b) bones[n] = { b, rest: b.quaternion.clone() };
+      }
+      scene.add(model);
+      emoteT = 0;
+    }).catch(() => { /* sin avatar, la vista previa queda vacía */ });
+  }
+
+  function applyEmote(t) {
+    if (!bones) return;
+    for (const k of Object.keys(bones)) bones[k].b.quaternion.copy(bones[k].rest);
+    const sway = Math.sin(t * 2) * 0.04;
+    if (bones.Spine1) setBoneSimple(bones.Spine1, sway * 0.6, 'x');
+    if (!emote) {
+      // Respiración en reposo
+      if (bones.RightArm) setBoneSimple(bones.RightArm, 0.12, 'z');
+      if (bones.LeftArm) setBoneSimple(bones.LeftArm, -0.12, 'z');
+      return;
+    }
+    if (emote === 'saludo') {
+      if (bones.RightArm) { setBoneSimple(bones.RightArm, -2.5, 'x'); setBoneSimple(bones.RightArm, Math.sin(t * 7) * 0.45, 'z'); }
+      if (bones.RightForeArm) setBoneSimple(bones.RightForeArm, 0.5, 'x');
+    } else if (emote === 'baile') {
+      if (bones.Hips) setBoneSimple(bones.Hips, Math.sin(t * 5) * 0.35, 'y');
+      if (bones.RightArm) setBoneSimple(bones.RightArm, -1.6 + Math.sin(t * 5) * 0.7, 'x');
+      if (bones.LeftArm) setBoneSimple(bones.LeftArm, -1.6 + Math.sin(t * 5 + Math.PI) * 0.7, 'x');
+    } else if (emote === 'senal') {
+      if (bones.RightArm) setBoneSimple(bones.RightArm, -1.5, 'x');
+      if (bones.RightForeArm) setBoneSimple(bones.RightForeArm, -0.15, 'x');
+    } else if (emote === 'flexion') {
+      if (bones.RightArm) { setBoneSimple(bones.RightArm, -2.2, 'x'); setBoneSimple(bones.RightForeArm, -1.9, 'x'); }
+      if (bones.LeftArm) { setBoneSimple(bones.LeftArm, -2.2, 'x'); setBoneSimple(bones.LeftForeArm, -1.9, 'x'); }
+      if (bones.Spine1) setBoneSimple(bones.Spine1, 0.25, 'x');
+    }
+    // Cada emote dura 3 s y vuelve al reposo
+    if (emote && t > 3) emote = null;
+  }
+  function setBoneSimple(bn, ang, axis) {
+    const ax = axis === 'x' ? new THREE.Vector3(1, 0, 0) : axis === 'y' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+    const q = new THREE.Quaternion().setFromAxisAngle(ax, ang);
+    bn.b.quaternion.copy(bn.rest).multiply(q);
+  }
+
+  let last = performance.now();
+  function tick() {
+    requestAnimationFrame(tick);
+    if (!visible) return;
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    spin += dt * 0.6;
+    if (model) model.rotation.y = Math.sin(spin) * 0.55;
+    if (emote) emoteT += dt;
+    applyEmote(emoteT);
+    renderer.render(scene, camera);
+  }
+  tick();
+
+  function resize() {
+    const w = canvas.clientWidth || canvas.width;
+    const h = canvas.clientHeight || canvas.height;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  return {
+    setChar: (look, charId) => { emote = null; build(look, charId); },
+    playEmote: (name) => { emote = name; emoteT = 0; },
+    setVisible: (v) => { visible = v; if (v) { last = performance.now(); resize(); } },
+  };
 }

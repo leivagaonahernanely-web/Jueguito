@@ -367,11 +367,11 @@ function fireWeapon(e, dir) {
   e.ammo--;
   e.cool = w.rate;
   e.shots++;
-  e.bloom = Math.min(1.2, e.bloom + w.bloom);
+  e.bloom = Math.min(1.5, e.bloom + w.bloom * 1.35);   // el defecto al disparar crece como en Free Fire
   if (e.ammo === 0) startReload(e);
 
   const aimMult = e.ads ? 0.35 : 1;
-  const moveMult = e.isPlayer && e.moving ? 1.6 : 1;
+  const moveMult = e.isPlayer && e.moving ? 1.9 : 1;   // correr mientras disparas abre mucho la mira
   const spread = w.spread * aimMult * moveMult + e.bloom * 0.04 * aimMult;
 
   const ox = e.x + dir.x * 0.6;
@@ -1176,7 +1176,7 @@ export function update(dt, input) {
     if (e.flash > 0) e.flash -= dt;
     if (e.healT > 0) e.healT -= dt;
     if (e.throwT > 0) e.throwT -= dt;
-    e.bloom = Math.max(0, e.bloom - dt * 2.4);
+    e.bloom = Math.max(0, e.bloom - dt * 2.0);
     if (e.reloadT > 0) {
       e.reloadT -= dt;
       if (e.reloadT <= 0) {
