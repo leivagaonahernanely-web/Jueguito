@@ -20,9 +20,10 @@ Abre la dirección que muestre (por ejemplo `http://localhost:3000`).
 **Controles PC**
 
 - `WASD`: moverse
+- `Espacio`: saltar · `C` o `Ctrl`: agacharse (mantener)
 - `Shift`: correr (consume resistencia; no puedes disparar mientras corres)
 - Ratón: mirar (clic en la pantalla para capturar el ratón; `Esc` pausa)
-- Clic izquierdo o `Espacio`: disparar (mantén para armas automáticas)
+- Clic izquierdo: disparar (mantén para armas automáticas)
 - Clic derecho o `Q`: apuntar (mirilla más precisa)
 - `R`: recargar · `H`: botiquín · `G`: granada
 
@@ -34,7 +35,8 @@ Abre la dirección que muestre (por ejemplo `http://localhost:3000`).
 
 ## Pantalla y controles
 
-- El juego es solo horizontal: en celular vertical aparece un aviso para girarlo.
+- El juego es solo horizontal: en cualquier pantalla vertical aparece un aviso para girarla.
+- **Saltar** (Espacio o botón SALTAR) y **agacharse** (C o Ctrl, o botón AGACHAR): al agacharte el cuerpo se hace más bajo y el enemigo tiene que apuntarte a una altura menor. El disparo a la cabeza cuenta según la altura real del cuerpo.
 - En celular, al disparar o apuntar, la puntería se inclina ligeramente hacia enemigos cercanos que tengas a la vista.
 - Los ajustes se pueden abrir desde el menú principal y desde la pausa, y tienen **Restablecer valores por defecto**.
 

@@ -16,7 +16,7 @@ const els = {
   minimap: $('minimap'),
   joy: $('joy'), joyKnob: $('joyKnob'),
   fire: $('btnFire'), ads: $('btnAds'), reload: $('btnReload'), heal: $('btnHeal'), grenade: $('btnGrenade'),
-  sprint: $('btnSprint'), stamfill: $('stamfill'),
+  sprint: $('btnSprint'), stamfill: $('stamfill'), crouch: $('btnCrouch'), jump: $('btnJump'),
   lobby: $('lobby'), lobbyCount: $('lobbyCount'), lobbyStatus: $('lobbyStatus'), charGrid: $('charGrid'),
   charInfo: $('charInfo'), lobbyPlayers: $('lobbyPlayers'), lobbyStart: $('lobbyStart'), lobbyBack: $('lobbyBack'),
   countdown: $('countdown'), countText: $('countText'),

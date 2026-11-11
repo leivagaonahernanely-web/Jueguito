@@ -3,7 +3,7 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 export function createInput(canvas, els, settings) {
   const keys = {};
-  const acc = { dyaw: 0, dpitch: 0, reload: false, heal: false, grenade: false };
+  const acc = { dyaw: 0, dpitch: 0, reload: false, heal: false, grenade: false, jump: false };
   let mouseFire = false;
   let mouseAds = false;
   let locked = false;
@@ -14,6 +14,7 @@ export function createInput(canvas, els, settings) {
     fireId: null,        // pointerId del botón de disparo
     adsId: null,         // pointerId del botón de apuntar
     sprintId: null,      // pointerId del botón de correr
+    crouchId: null,      // pointerId del botón de agacharse
   };
 
   const sensMouse = () => 0.0022 * (settings.sens ?? 1);
@@ -25,6 +26,7 @@ export function createInput(canvas, els, settings) {
     if (e.code === 'KeyR' && !e.repeat) acc.reload = true;
     if (e.code === 'KeyH' && !e.repeat) acc.heal = true;
     if (e.code === 'KeyG' && !e.repeat) acc.grenade = true;
+    if (e.code === 'Space' && !e.repeat) acc.jump = true;
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
   });
   window.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -89,6 +91,10 @@ export function createInput(canvas, els, settings) {
       touch.sprintId = null;
       els.sprint?.classList.remove('active');
     }
+    if (touch.crouchId === e.pointerId) {
+      touch.crouchId = null;
+      els.crouch?.classList.remove('active');
+    }
   };
   window.addEventListener('pointerup', endPointer);
   window.addEventListener('pointercancel', endPointer);
@@ -106,6 +112,8 @@ export function createInput(canvas, els, settings) {
   holdBtn(els.fire, (id) => { touch.fireId = id; }, null);
   holdBtn(els.ads, (id) => { touch.adsId = id; }, null);
   holdBtn(els.sprint, (id) => { touch.sprintId = id; }, null);
+  holdBtn(els.crouch, (id) => { touch.crouchId = id; }, null);
+  if (els.jump) els.jump.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.jump = true; });
   if (els.reload) els.reload.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.reload = true; });
   if (els.heal) els.heal.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.heal = true; });
   if (els.grenade) els.grenade.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.grenade = true; });
@@ -149,7 +157,9 @@ export function createInput(canvas, els, settings) {
       strafe: clamp(strafe, -1, 1),
       dyaw: acc.dyaw,
       dpitch: acc.dpitch,
-      fire: mouseFire || !!keys.Space || touch.fireId !== null,
+      fire: mouseFire || touch.fireId !== null,
+      jump: acc.jump,
+      crouch: !!(keys.KeyC || keys.ControlLeft || keys.ControlRight) || touch.crouchId !== null,
       ads: mouseAds || !!keys.KeyQ || touch.adsId !== null,
       sprint: !!(keys.ShiftLeft || keys.ShiftRight) || touch.sprintId !== null,
       // Ayuda de puntería solo en celular (al disparar o apuntar con los botones táctiles)
@@ -163,6 +173,7 @@ export function createInput(canvas, els, settings) {
     acc.reload = false;
     acc.heal = false;
     acc.grenade = false;
+    acc.jump = false;
     return out;
   }
 

@@ -137,6 +137,7 @@ function makeEntity(p, name, isPlayer, colorIdx, charId = 'recluta') {
     id: G.nextId++, x: p.x, z: p.z, r: PLAYER_RADIUS, name, isPlayer, colorIdx,
     charId, look: ch.look, speedMult: ch.speed, healMult: ch.healMult, medMax: ch.medMax,
     hp: ch.hp, maxHp: ch.hp, stamina: STAMINA_MAX, sprinting: false,
+    y: 0, vy: 0, crouch: false,
     armor: 0, alive: true, kills: 0,
     weapon: 'pistola', ammo: WEAPONS.pistola.mag, reloadT: 0,
     meds: 0, grenades: 0, cool: 0, bloom: 0, healT: 0, throwT: 0, shots: 0,
@@ -493,8 +494,11 @@ function updateBullets(dt) {
       }
       for (const e of G.entities) {
         if (!e.alive || e === b.owner) continue;
-        if (Math.hypot(b.x - e.x, b.z - e.z) < e.r + 0.15 && b.y > 0 && b.y < 1.85) {
-          const head = b.y > 1.5;
+        // La altura del golpe se mide desde los pies del enemigo (saltar o agacharse cambia la zona)
+        const ry = b.y - (e.y || 0);
+        const top = e.crouch ? 1.25 : 1.85;
+        if (Math.hypot(b.x - e.x, b.z - e.z) < e.r + 0.15 && ry > 0 && ry < top) {
+          const head = ry > top - 0.35;
           const label = WEAPONS[b.weapon].name;
           damage(e, b.dmg * (head ? 1.8 : 1), b.owner, label, head);
           if (head && b.owner.isPlayer) G.events.push({ type: 'headshot' });
@@ -520,14 +524,23 @@ function updatePlayer(dt, input) {
   const m = Math.hypot(fwd, str);
   if (m > 1) { fwd /= m; str /= m; }
   // Sprint: solo hacia adelante, sin apuntar y con resistencia; no se puede disparar mientras corres
-  const sprinting = !!input.sprint && fwd > 0.3 && !p.ads && p.stamina > 0;
+  // Agacharse: más lento y con la cabeza más baja; no se puede correr agachado
+  p.crouch = !!input.crouch;
+  // Salto: impulso hacia arriba y gravedad (la altura se usa para los disparos y el render)
+  if (input.jump && p.y <= 0 && !p.crouch) p.vy = 5.6;
+  if (p.y > 0 || p.vy > 0) {
+    p.vy -= 16 * dt;
+    p.y += p.vy * dt;
+    if (p.y <= 0) { p.y = 0; p.vy = 0; }
+  }
+  const sprinting = !!input.sprint && fwd > 0.3 && !p.ads && !p.crouch && p.stamina > 0;
   if (sprinting) {
     p.stamina = Math.max(0, p.stamina - STAMINA_DRAIN * dt);
   } else {
     p.stamina = Math.min(STAMINA_MAX, p.stamina + STAMINA_REGEN * dt);
   }
   p.sprinting = sprinting && p.stamina > 0;
-  const speed = PLAYER_SPEED * p.speedMult * (p.ads ? ADS_SPEED_MULT : 1) * (p.sprinting ? SPRINT_MULT : 1);
+  const speed = PLAYER_SPEED * p.speedMult * (p.ads ? ADS_SPEED_MULT : 1) * (p.crouch ? 0.6 : 1) * (p.sprinting ? SPRINT_MULT : 1);
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const rx = -fz, rz = fx;
   moveEnt(p, (fx * fwd + rx * str) * speed * dt, (fz * fwd + rz * str) * speed * dt);

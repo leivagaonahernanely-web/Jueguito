@@ -1121,8 +1121,10 @@ export function createView(canvas) {
       }
       const w = WEAPONS[e.weapon];
       setWeaponModel(ch, e.weapon);
-      ch.root.position.set(e.x, 0, e.z);
+      ch.root.position.set(e.x, e.y || 0, e.z);
       ch.root.rotation.y = e.yaw;
+      // Agachado: el cuerpo se encoge desde los pies
+      ch.body.scale.y += ((e.crouch ? 0.7 : 1) - ch.body.scale.y) * Math.min(1, dt * 12);
       ch.vest.visible = e.armor > 0;
       ch.reloadPose = e.reloadT > 0 ? Math.sin((1 - e.reloadT / w.reload) * Math.PI) : 0;
       if (ch.animated) poseAvatar(ch, e);

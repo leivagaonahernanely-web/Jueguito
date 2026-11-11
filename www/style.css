@@ -586,7 +586,7 @@ body::after {
 
 /* Aviso de orientación: el juego es solo horizontal */
 #rotate { display: none; }
-@media (orientation: portrait) and (pointer: coarse) {
+@media (orientation: portrait) {
   #rotate {
     display: flex;
     position: fixed;
@@ -690,3 +690,14 @@ body::after {
 @media (pointer: coarse) {
   .btn { display: flex; }
 }
+
+/* ===== Distribución de botones táctiles (estilo de los juegos de batalla real) ===== */
+#btnFire { right: 22px; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); width: 122px; height: 122px; }
+#btnAds { right: 156px; bottom: calc(env(safe-area-inset-bottom, 0px) + 30px); width: 80px; height: 80px; }
+#btnJump { right: 22px; bottom: calc(env(safe-area-inset-bottom, 0px) + 158px); width: 66px; height: 66px; border-radius: 50%; }
+#btnCrouch { right: 104px; bottom: calc(env(safe-area-inset-bottom, 0px) + 150px); width: 58px; height: 58px; border-radius: 50%; }
+#btnReload { right: 168px; bottom: calc(env(safe-area-inset-bottom, 0px) + 122px); width: 56px; height: 56px; border-radius: 50%; }
+#btnHeal { right: 96px; bottom: calc(env(safe-area-inset-bottom, 0px) + 216px); width: 52px; height: 52px; border-radius: 50%; }
+#btnGrenade { right: 168px; bottom: calc(env(safe-area-inset-bottom, 0px) + 186px); width: 52px; height: 52px; border-radius: 50%; }
+#btnSprint { right: 240px; bottom: calc(env(safe-area-inset-bottom, 0px) + 218px); width: 52px; height: 52px; border-radius: 50%; }
+.jump-btn, .crouch-btn { background: radial-gradient(circle at 35% 28%, rgba(255,255,255,0.3), rgba(18,24,36,0.82) 72%); }
