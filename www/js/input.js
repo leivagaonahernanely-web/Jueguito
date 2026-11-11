@@ -152,6 +152,8 @@ export function createInput(canvas, els, settings) {
       fire: mouseFire || !!keys.Space || touch.fireId !== null,
       ads: mouseAds || !!keys.KeyQ || touch.adsId !== null,
       sprint: !!(keys.ShiftLeft || keys.ShiftRight) || touch.sprintId !== null,
+      // Ayuda de puntería solo en celular (al disparar o apuntar con los botones táctiles)
+      assist: touch.fireId !== null || touch.adsId !== null,
       reload: acc.reload,
       heal: acc.heal,
       grenade: acc.grenade,

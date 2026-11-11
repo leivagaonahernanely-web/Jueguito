@@ -581,3 +581,112 @@ body::after {
   text-overflow: ellipsis;
 }
 .lobby-players span.me { background: rgba(79, 195, 247, 0.25); font-weight: 700; }
+
+/* ===== Rediseño: controles táctiles y menús ===== */
+
+/* Aviso de orientación: el juego es solo horizontal */
+#rotate { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotate {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    background: radial-gradient(ellipse at 50% 40%, #1d2a44, #04070e 75%);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 600;
+    text-align: center;
+  }
+  #rotate svg { color: #ffd166; animation: rotateHint 2.4s ease-in-out infinite; }
+}
+@keyframes rotateHint {
+  0%, 20% { transform: rotate(0deg); }
+  50%, 80% { transform: rotate(-90deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* Botones táctiles: círculos con icono y etiqueta */
+.btn {
+  display: none;
+  position: absolute;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0;
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  background: radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.24), rgba(18, 24, 36, 0.78) 72%);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.08s ease, filter 0.08s ease;
+}
+.btn .ico { display: flex; }
+.btn .ico svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.btn .ico svg[fill="currentColor"], .btn .ico svg path[fill="currentColor"] { fill: currentColor; }
+.btn .lbl { font-size: 9px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.9; }
+.btn.active { transform: scale(0.93); filter: brightness(1.25); }
+
+#btnFire {
+  right: 26px; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  width: 124px; height: 124px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #ff8a80, #d32f2f 70%);
+  border: 2px solid rgba(255, 205, 210, 0.55);
+  box-shadow: 0 12px 28px rgba(211, 47, 47, 0.45), inset 0 2px 0 rgba(255, 255, 255, 0.35);
+}
+#btnFire .lbl { font-size: 11px; }
+#btnAds {
+  right: 158px; bottom: calc(env(safe-area-inset-bottom, 0px) + 34px);
+  width: 76px; height: 76px; border-radius: 50%;
+}
+#btnReload {
+  right: 250px; bottom: calc(env(safe-area-inset-bottom, 0px) + 46px);
+  width: 60px; height: 60px; border-radius: 50%;
+}
+#btnHeal {
+  right: 26px; bottom: calc(env(safe-area-inset-bottom, 0px) + 168px);
+  width: 62px; height: 62px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #a5d6a7, #2e7d32 72%);
+  border-color: rgba(200, 255, 200, 0.45);
+}
+#btnGrenade {
+  right: 100px; bottom: calc(env(safe-area-inset-bottom, 0px) + 178px);
+  width: 58px; height: 58px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #ffcc80, #ef6c00 72%);
+  border-color: rgba(255, 224, 178, 0.5);
+}
+#btnSprint {
+  right: 166px; bottom: calc(env(safe-area-inset-bottom, 0px) + 122px);
+  width: 56px; height: 56px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #fff59d, #f9a825 72%);
+  border-color: rgba(255, 249, 196, 0.5);
+  color: #3e2a00;
+}
+#btnSprint .lbl, #btnSprint .ico { color: #3e2a00; }
+#btnSprint .ico svg { color: #3e2a00; }
+
+/* Menús: estilo más limpio */
+.cta { border-radius: 999px; padding: 15px 64px; box-shadow: 0 8px 0 #b77b00, 0 16px 34px rgba(0, 0, 0, 0.45); }
+.ghost {
+  border-radius: 999px;
+  min-width: 220px;
+  padding: 13px 28px;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.ghost:active { transform: scale(0.97); }
+.menu-inner.panel { backdrop-filter: blur(10px); }
+@media (pointer: coarse) {
+  .btn { display: flex; }
+}

@@ -23,7 +23,8 @@ const els = {
   menu: $('menu'), name: $('name'), play: $('play'),
   openControls: $('openControls'), openSettings: $('openSettings'),
   settings: $('settings'), sens: $('sens'), sensVal: $('sensVal'), vol: $('vol'), volVal: $('volVal'),
-  quality: $('quality'), backSettings: $('backSettings'),
+  quality: $('quality'), backSettings: $('backSettings'), resetSettings: $('resetSettings'),
+  openSettingsPause: $('openSettingsPause'),
   controls: $('controls'), backControls: $('backControls'),
   pause: $('pause'), resume: $('resume'), toMenuPause: $('toMenuPause'),
   end: $('end'), endTitle: $('endTitle'), endText: $('endText'), again: $('again'), toMenuEnd: $('toMenuEnd'),
@@ -100,8 +101,33 @@ function showMenu() {
   show(els.menu);
 }
 
-els.openSettings.addEventListener('click', () => { hide(els.menu); show(els.settings); });
-els.backSettings.addEventListener('click', () => { hide(els.settings); show(els.menu); });
+// Los ajustes se pueden abrir desde el menú principal o desde la pausa
+let settingsFrom = 'menu';
+els.openSettings.addEventListener('click', () => { settingsFrom = 'menu'; hide(els.menu); show(els.settings); });
+els.openSettingsPause.addEventListener('click', () => { settingsFrom = 'pause'; hide(els.pause); show(els.settings); });
+els.backSettings.addEventListener('click', () => {
+  hide(els.settings);
+  if (settingsFrom === 'pause' && G.state === 'playing') show(els.pause);
+  else show(els.menu);
+});
+els.resetSettings.addEventListener('click', () => {
+  settings = { ...DEFAULTS, name: settings.name, char: settings.char };
+  els.sens.value = settings.sens;
+  els.vol.value = settings.vol;
+  els.quality.value = settings.quality;
+  refreshSettingsLabels();
+  SFX.setVolume(settings.vol);
+  view.applyQuality(settings.quality);
+  saveSettings();
+});
+
+// Pide pantalla horizontal al empezar (en navegadores que lo permiten; el aviso cubre el resto)
+function lockLandscape() {
+  try {
+    const o = screen.orientation;
+    if (o && o.lock) o.lock('landscape').catch(() => {});
+  } catch (_) { /* sin bloqueo de orientación */ }
+}
 els.openControls.addEventListener('click', () => { hide(els.menu); show(els.controls); });
 els.backControls.addEventListener('click', () => { hide(els.controls); show(els.menu); });
 
@@ -130,6 +156,7 @@ function requestLock() {
 }
 
 function startGame() {
+  lockLandscape();
   settings.name = (els.name.value || '').trim().slice(0, 14);
   saveSettings();
   SFX.initAudio(settings.vol);

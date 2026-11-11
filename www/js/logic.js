@@ -222,6 +222,31 @@ export function viewPitch(p) {
   return clamp(p.pitch + p.recoilOff, -0.9, 0.9);
 }
 
+// Ayuda de puntería para celular: si el enemigo está casi en la mira y a la vista, se inclina la puntería hacia él
+function assistDir(p, dir) {
+  const w = WEAPONS[p.weapon];
+  let best = null, bestDot = Math.cos(0.07); // ~4 grados
+  for (const b of G.bots) {
+    if (!b.alive) continue;
+    const dx = b.x - p.x, dz = b.z - p.z;
+    const d = Math.hypot(dx, dz);
+    if (d > w.range * 0.85 || d < 0.5) continue;
+    // Dirección desde los ojos (altura 1.35) hasta el pecho del enemigo (altura 1.2)
+    const vy = 1.2 - 1.35;
+    const vl = Math.hypot(dx, vy, dz) || 1;
+    const t = { x: dx / vl, y: vy / vl, z: dz / vl };
+    const dot = dir.x * t.x + dir.y * t.y + dir.z * t.z;
+    if (dot > bestDot && losClear(p.x, p.z, b.x, b.z)) {
+      bestDot = dot;
+      best = t;
+    }
+  }
+  if (!best) return dir;
+  const x = dir.x * 0.5 + best.x * 0.5, y = dir.y * 0.5 + best.y * 0.5, z = dir.z * 0.5 + best.z * 0.5;
+  const l = Math.hypot(x, y, z) || 1;
+  return { x: x / l, y: y / l, z: z / l };
+}
+
 function aimDirPlayer(p) {
   const pitch = viewPitch(p);
   const cp = Math.cos(pitch);
@@ -509,7 +534,7 @@ function updatePlayer(dt, input) {
 
   // Recuperación del retroceso: vuelve a la mira original cuando dejas de disparar
   if (!input.fire) p.recoilOff = Math.max(0, p.recoilOff - dt * (p.ads ? 2.4 : 1.6));
-  if (input.fire) fireWeapon(p, aimDirPlayer(p));
+  if (input.fire) fireWeapon(p, input.assist ? assistDir(p, aimDirPlayer(p)) : aimDirPlayer(p));
   if (input.reload) startReload(p);
   if (input.heal) useMed(p);
   if (input.grenade) throwGrenade(p, aimDirPlayer(p));

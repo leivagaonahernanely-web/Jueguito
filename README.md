@@ -32,6 +32,12 @@ Abre la dirección que muestre (por ejemplo `http://localhost:3000`).
 - Arrastrar en la mitad derecha: mirar
 - Botones: DISPARAR, APUNTAR, recargar (R), curar (+), granada (💣) y CORRER
 
+## Pantalla y controles
+
+- El juego es solo horizontal: en celular vertical aparece un aviso para girarlo.
+- En celular, al disparar o apuntar, la puntería se inclina ligeramente hacia enemigos cercanos que tengas a la vista.
+- Los ajustes se pueden abrir desde el menú principal y desde la pausa, y tienen **Restablecer valores por defecto**.
+
 ## Partida y lobby
 
 1. **JUGAR** abre la sala de espera: se llena de jugadores hasta 30 y luego empieza sola (o pulsa **INICIAR AHORA**).

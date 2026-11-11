@@ -53,12 +53,12 @@
     </div>
 
     <div id="joy"><div id="joyKnob"></div></div>
-    <button class="btn" id="btnFire">DISPARAR</button>
-    <button class="btn" id="btnAds">APUNTAR</button>
-    <button class="btn" id="btnReload">R</button>
-    <button class="btn" id="btnHeal">+</button>
-    <button class="btn" id="btnGrenade">💣</button>
-    <button class="btn" id="btnSprint">CORRER</button>
+    <button class="btn fire-btn" id="btnFire"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg></span><span class="lbl">Disparar</span></button>
+    <button class="btn ads-btn" id="btnAds"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v3M12 14v3M7 12h3M14 12h3"/></svg></span><span class="lbl">Apuntar</span></button>
+    <button class="btn reload-btn" id="btnReload"><span class="ico"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/></svg></span><span class="lbl">Recargar</span></button>
+    <button class="btn heal-btn" id="btnHeal"><span class="ico"><svg viewBox="0 0 24 24"><path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z" fill="currentColor" stroke="none"/></svg></span><span class="lbl">Curar</span></button>
+    <button class="btn grenade-btn" id="btnGrenade"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="14" r="6.5"/><path d="M12 7.5V4h3M9 4h6"/></svg></span><span class="lbl">Granada</span></button>
+    <button class="btn sprint-btn" id="btnSprint"><span class="ico"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" fill="currentColor" stroke="none"/></svg></span><span class="lbl">Correr</span></button>
   </div>
 
   <div id="countdown" class="overlay hidden"><div id="countText">3</div></div>
@@ -115,6 +115,7 @@
           <option value="baja">Baja (más fluido)</option>
         </select>
       </label>
+      <button id="resetSettings" class="ghost">Restablecer valores por defecto</button>
       <button id="backSettings" class="ghost">Volver</button>
     </div>
   </div>
@@ -149,6 +150,7 @@
     <div class="menu-inner">
       <h1 class="small-h">PAUSA</h1>
       <button id="resume" class="cta">SEGUIR</button>
+      <button id="openSettingsPause" class="ghost">Ajustes</button>
       <button id="toMenuPause" class="ghost">Salir al menú</button>
     </div>
   </div>
@@ -161,6 +163,12 @@
       <button id="again" class="cta">JUGAR OTRA VEZ</button>
       <button id="toMenuEnd" class="ghost">Menú principal</button>
     </div>
+  </div>
+
+  <!-- Aviso: el juego solo funciona en horizontal -->
+  <div id="rotate">
+    <svg viewBox="0 0 64 64" width="64" height="64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><rect x="20" y="8" width="24" height="44" rx="5"/><path d="M32 52h.01"/><path d="M52 20v-8M48 16l4-4 4 4"/></svg>
+    <p>Gira tu celular a horizontal para jugar</p>
   </div>
 
   <div id="fatal" class="overlay hidden">
