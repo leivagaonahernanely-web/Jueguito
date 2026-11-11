@@ -37,6 +37,12 @@ const GLIDE_START = 48;   // altura inicial en metros
 const GLIDE_FALL = 11;    // descenso en m/s (≈ 4,5 s de vuelo)
 const GLIDE_SPEED = 9;    // desplazamiento horizontal en m/s
 
+// ---------- Estilo Free Fire ----------
+// Dos armas y muro de hielo (gloo): cobertura desplegable que bloquea balas.
+const MAX_GLOO = 3;
+const LOOT_GLOO = 10;
+const GLOO = { hp: 220, dist: 2.2, w: 3.2, d: 0.5, h: 2.4 };
+
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const pick = (arr) => arr[(Math.random() * arr.length) | 0];
@@ -91,7 +97,10 @@ function forEachNear(minX, minZ, maxX, maxZ, fn) {
     const base = gx * gridW;
     for (let gz = z0; gz <= z1; gz++) {
       const cell = grid[base + gz];
-      for (let k = 0; k < cell.length; k++) fn(G.obstacles[cell[k]]);
+      for (let k = 0; k < cell.length; k++) {
+        const o = G.obstacles[cell[k]];
+        if (!o.gone) fn(o);
+      }
     }
   }
 }
@@ -216,6 +225,7 @@ function makeEntity(p, name, isPlayer, colorIdx, charId = 'recluta') {
     yaw: 0, pitch: 0, recoilOff: 0, moving: false, walk: 0, flash: 0, ads: false,
     reactT: 0, retreat: false,
     glide: false, dropX: p.x, dropZ: p.z,
+    gloo: 0, slots: ['pistola', null], slot: 0, slotAmmo: [WEAPONS.pistola.mag, 0],
     lastKiller: null, lastWeapon: '',
     // IA de bots
     target: null, goal: null, thinkT: 0, grenadeT: 0,
@@ -424,6 +434,10 @@ function kill(e, src, label) {
     G.loot.push({ id: G.nextId++, x: e.x + rand(-0.8, 0.8), z: e.z + rand(-0.8, 0.8), kind: 'grenade', lock: 0 });
   }
   if (e.armor > 0) G.loot.push({ id: G.nextId++, x: e.x, z: e.z, kind: 'armor', lock: 0 });
+  if (e.gloo > 0) G.loot.push({ id: G.nextId++, x: e.x + rand(-0.8, 0.8), z: e.z + rand(-0.8, 0.8), kind: 'gloo', lock: 0 });
+  if (e.isPlayer && e.slots && e.slots[1] && e.slots[1] !== e.weapon) {
+    G.loot.push({ id: G.nextId++, x: e.x + rand(-1, 1), z: e.z + rand(-1, 1), kind: 'weapon', weapon: e.slots[1], lock: 1.5 });
+  }
 
   let msg;
   if (src && src !== e) {
@@ -452,15 +466,36 @@ function tryPickup(e) {
     } else if (it.kind === 'armor') {
       if (e.armor >= (e.isPlayer ? 100 : 50)) continue;
       e.armor = Math.min(100, e.armor + 50);
+    } else if (it.kind === 'gloo') {
+      if (e.gloo >= MAX_GLOO) continue;
+      e.gloo++;
     } else {
-      const cur = e.weapon, want = it.weapon;
-      if (e.isPlayer && want === cur) {
-        e.ammo = WEAPONS[want].mag;
-        e.reloadT = 0;
+      const want = it.weapon;
+      if (e.isPlayer && e.slots) {
+        // Dos ranuras como en Free Fire: llena la libre, recarga si es la misma,
+        // y si están las dos ocupadas suelta la actual en el suelo
+        if (want === e.weapon) {
+          e.ammo = WEAPONS[want].mag;
+          e.slotAmmo[e.slot] = WEAPONS[want].mag;
+          e.reloadT = 0;
+        } else if (e.slots[1 - e.slot] === want) {
+          e.slotAmmo[1 - e.slot] = WEAPONS[want].mag;
+        } else if (e.slots[1 - e.slot] === null) {
+          e.slots[1 - e.slot] = want;
+          e.slotAmmo[1 - e.slot] = WEAPONS[want].mag;
+        } else {
+          G.loot.push({ id: G.nextId++, x: e.x, z: e.z, kind: 'weapon', weapon: e.weapon, lock: 1.5 });
+          e.slots[e.slot] = want;
+          e.weapon = want;
+          e.slotAmmo[e.slot] = WEAPONS[want].mag;
+          e.ammo = WEAPONS[want].mag;
+          e.reloadT = 0;
+        }
       } else {
+        // Bots: una sola arma, siempre buscan una mejor
+        const cur = e.weapon;
         const better = WEAPONS[want].rank > WEAPONS[cur].rank;
-        if (!e.isPlayer && !better) continue;
-        // El arma anterior queda en el suelo, bloqueada un momento para no recogerla de nuevo
+        if (!better) continue;
         G.loot.push({ id: G.nextId++, x: e.x, z: e.z, kind: 'weapon', weapon: cur, lock: 1.5 });
         e.weapon = want;
         e.ammo = WEAPONS[want].mag;
@@ -511,6 +546,15 @@ function explode(g) {
     if (d < GRENADE.radius) {
       const amt = GRENADE.dmg * (1 - d / GRENADE.radius) * (1 - d / GRENADE.radius * 0.3);
       damage(e, amt, g.owner, 'Granada');
+    }
+  }
+  for (const o of G.obstacles) {
+    if (!o.gloo || o.gone) continue;
+    const cx = o.x + o.w / 2, cz = o.z + o.d / 2;
+    const d = Math.hypot(cx - g.x, cz - g.z);
+    if (d < GRENADE.radius + 1.5) {
+      o.hp -= GRENADE.dmg * (1 - d / (GRENADE.radius + 1.5));
+      if (o.hp <= 0) { o.gone = true; G.events.push({ type: 'glooBreak', x: cx, z: cz }); }
     }
   }
 }
@@ -581,7 +625,15 @@ function updateBullets(dt) {
         gone = true;
         break;
       }
-      if (blockedAt(b.x, b.y, b.z)) {
+      const hitObs = hitObstacle(b.x, b.y, b.z);
+      if (hitObs) {
+        if (hitObs.gloo && !hitObs.gone) {
+          hitObs.hp -= b.dmg;
+          if (hitObs.hp <= 0) {
+            hitObs.gone = true;
+            G.events.push({ type: 'glooBreak', x: hitObs.x + hitObs.w / 2, z: hitObs.z + hitObs.d / 2 });
+          }
+        }
         G.events.push({ type: 'impact', x: b.x, y: b.y, z: b.z, ground: false });
         gone = true;
         break;
@@ -656,6 +708,8 @@ function updatePlayer(dt, input) {
   if (input.reload) startReload(p);
   if (input.heal) useMed(p);
   if (input.grenade) throwGrenade(p, aimDirPlayer(p));
+  if (input.swap) swapWeapon(p);
+  if (input.gloo) throwGloo(p);
   tryPickup(p);
 }
 
@@ -722,6 +776,8 @@ function updateBot(b, dt) {
       const perp = b.yaw + (Math.PI / 2) * b.strafe;
       moveEnt(b, Math.cos(perp) * 2.4 * dt, Math.sin(perp) * 2.4 * dt);
     }
+    // Muro de hielo cuando están heridos (cobertura estilo Free Fire)
+    if (b.gloo > 0 && b.hp < b.maxHp * 0.55 && d < 35 && Math.random() < dt * 0.9) throwGloo(b);
     // Granadas contra enemigos a media distancia
     b.grenadeT -= dt;
     if (b.grenades > 0 && d > 12 && d < 24 && b.grenadeT <= 0 && Math.random() < dt * 0.4) {
@@ -769,6 +825,7 @@ export function startMatch(name = 'Tú', charId = 'recluta') {
   const ps = freeSpot();
   G.player = makeEntity(ps, G.playerName, true, 0, CHARACTERS[charId] ? charId : 'recluta');
   G.player.grenades = 1;
+  G.player.gloo = 2;
   G.player.y = GLIDE_START;
   G.player.glide = true;
   G.airdrop = null;
@@ -779,6 +836,7 @@ export function startMatch(name = 'Tú', charId = 'recluta') {
     const b = makeEntity(s, `Bot ${i + 1}`, false, 1 + (i % 7), bot);
     b.y = GLIDE_START;
     b.glide = true;
+    if (Math.random() < 0.45) b.gloo = 1;
     G.bots.push(b);
   }
   G.entities = [G.player, ...G.bots];
@@ -796,6 +854,7 @@ export function startMatch(name = 'Tú', charId = 'recluta') {
   addLoot('med', LOOT_MEDS);
   addLoot('grenade', LOOT_GRENADES);
   addLoot('armor', LOOT_ARMOR);
+  addLoot('gloo', LOOT_GLOO);
 
   // Arcas doradas junto a las casas: mejor botín para quien llegue primero
   G.chests = [];
@@ -888,6 +947,75 @@ function updateChests(dt) {
     if (Math.random() < 0.35) G.loot.push({ id: G.nextId++, x: gx(), z: gz(), kind: 'med', lock: 0 });
     G.events.push({ type: 'chest', x: c.x, z: c.z });
   }
+}
+
+// Devuelve el obstáculo que ocupa ese punto (las balas lo usan para dañar el muro de hielo)
+function hitObstacle(x, y, z) {
+  let hit = null;
+  forEachNear(x - 1, z - 1, x + 1, z + 1, (o) => {
+    if (hit) return;
+    if (o.shape === 'rect') {
+      if (y < o.h && x >= o.x && x <= o.x + o.w && z >= o.z && z <= o.z + o.d) hit = o;
+    } else if (y < o.h) {
+      const dx = x - o.x, dz = z - o.z;
+      if (dx * dx + dz * dz <= o.r * o.r) hit = o;
+    }
+  });
+  return hit;
+}
+
+// Registra un obstáculo nuevo en la rejilla espacial (los muros se crean durante la partida)
+function addObstacleToGrid(o) {
+  if (!grid) return;
+  const idx = G.obstacles.length - 1;
+  const x0 = clamp(Math.floor(o.x / GRID_CELL), 0, gridW - 1);
+  const x1 = clamp(Math.floor((o.x + o.w) / GRID_CELL), 0, gridW - 1);
+  const z0 = clamp(Math.floor(o.z / GRID_CELL), 0, gridW - 1);
+  const z1 = clamp(Math.floor((o.z + o.d) / GRID_CELL), 0, gridW - 1);
+  for (let gx = x0; gx <= x1; gx++) {
+    const base = gx * gridW;
+    for (let gz = z0; gz <= z1; gz++) grid[base + gz].push(idx);
+  }
+}
+
+// Muro de hielo: se despliega frente al personaje y bloquea balas y movimiento
+export function throwGloo(e) {
+  if (!e.alive || e.glide || e.gloo <= 0) return false;
+  const fx = Math.sin(e.yaw), fz = Math.cos(e.yaw);
+  const alongX = Math.abs(fx) < Math.abs(fz); // miro sobre todo en Z: la pared cruza en X
+  const w = alongX ? GLOO.w : GLOO.d;
+  const d = alongX ? GLOO.d : GLOO.w;
+  let dist = GLOO.dist, cx = 0, cz = 0, placed = false;
+  while (dist >= 0.9) {
+    cx = e.x + fx * dist;
+    cz = e.z + fz * dist;
+    const pts = alongX
+      ? [[cx, cz], [cx - w * 0.42, cz], [cx + w * 0.42, cz]]
+      : [[cx, cz], [cx, cz - d * 0.42], [cx, cz + d * 0.42]];
+    if (!pts.some((pt) => blockedAt(pt[0], 1.2, pt[1]))) { placed = true; break; }
+    dist -= 0.65;
+  }
+  if (!placed) return false;
+  const o = {
+    shape: 'rect', kind: 'gloo', x: cx - w / 2, z: cz - d / 2, w, d, h: GLOO.h,
+    color: 0x7fd0ff, gloo: true, hp: GLOO.hp, maxHp: GLOO.hp,
+  };
+  G.obstacles.push(o);
+  addObstacleToGrid(o);
+  e.gloo--;
+  G.events.push({ type: 'gloo', x: cx, z: cz });
+  return true;
+}
+
+// Cambiar de arma entre las dos ranuras (tecla X o el botón táctil)
+export function swapWeapon(e) {
+  if (!e.alive || !e.slots || !e.slots[1] || e.glide) return;
+  e.slotAmmo[e.slot] = e.ammo;
+  e.slot = 1 - e.slot;
+  e.weapon = e.slots[e.slot];
+  e.ammo = e.slotAmmo[e.slot];
+  e.reloadT = 0;
+  G.events.push({ type: 'swap' });
 }
 
 function checkWin() {

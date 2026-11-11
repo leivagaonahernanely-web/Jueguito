@@ -3,7 +3,7 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 export function createInput(canvas, els, settings) {
   const keys = {};
-  const acc = { dyaw: 0, dpitch: 0, reload: false, heal: false, grenade: false, jump: false };
+  const acc = { dyaw: 0, dpitch: 0, reload: false, heal: false, grenade: false, jump: false, swap: false, gloo: false };
   let mouseFire = false;
   let mouseAds = false;
   let locked = false;
@@ -24,6 +24,8 @@ export function createInput(canvas, els, settings) {
   window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code === 'KeyR' && !e.repeat) acc.reload = true;
+    if (e.code === 'KeyX' && !e.repeat) acc.swap = true;
+    if (e.code === 'KeyF' && !e.repeat) acc.gloo = true;
     if (e.code === 'KeyH' && !e.repeat) acc.heal = true;
     if (e.code === 'KeyG' && !e.repeat) acc.grenade = true;
     if (e.code === 'Space' && !e.repeat) acc.jump = true;
@@ -125,6 +127,8 @@ export function createInput(canvas, els, settings) {
   tapBtn(els.reload, () => { acc.reload = true; });
   tapBtn(els.heal, () => { acc.heal = true; });
   tapBtn(els.grenade, () => { acc.grenade = true; });
+  tapBtn(els.swap, () => { acc.swap = true; });
+  tapBtn(els.glooBtn, () => { acc.gloo = true; });
 
   function drawJoystick() {
     const j = els.joy;
@@ -175,6 +179,8 @@ export function createInput(canvas, els, settings) {
       reload: acc.reload,
       heal: acc.heal,
       grenade: acc.grenade,
+      swap: acc.swap,
+      gloo: acc.gloo,
     };
     acc.dyaw = 0;
     acc.dpitch = 0;
@@ -182,6 +188,8 @@ export function createInput(canvas, els, settings) {
     acc.heal = false;
     acc.grenade = false;
     acc.jump = false;
+    acc.swap = false;
+    acc.gloo = false;
     return out;
   }
 

@@ -17,6 +17,7 @@ const els = {
   joy: $('joy'), joyKnob: $('joyKnob'),
   fire: $('btnFire'), ads: $('btnAds'), reload: $('btnReload'), heal: $('btnHeal'), grenade: $('btnGrenade'),
   sprint: $('btnSprint'), stamfill: $('stamfill'), crouch: $('btnCrouch'), jump: $('btnJump'),
+  swap: $('btnSwap'), glooBtn: $('btnGloo'), slot2: $('slot2'), gloo: $('glooCount'),
   lobby: $('lobby'), lobbyCount: $('lobbyCount'), lobbyStatus: $('lobbyStatus'), charGrid: $('charGrid'),
   charInfo: $('charInfo'), lobbyPlayers: $('lobbyPlayers'), lobbyStart: $('lobbyStart'), lobbyBack: $('lobbyBack'),
   countdown: $('countdown'), countText: $('countText'),
@@ -391,6 +392,17 @@ function handleEvents() {
       case 'chest':
         SFX.playChest();
         break;
+      case 'gloo':
+        SFX.playGloo();
+        break;
+      case 'glooBreak': {
+        const d = Math.hypot(ev.x - p.x, ev.z - p.z);
+        if (d < 45) SFX.playExplosion(d);
+        break;
+      }
+      case 'swap':
+        SFX.playPickup();
+        break;
       case 'reload':
         if (ev.id === p.id) SFX.playReload();
         break;
@@ -451,6 +463,8 @@ function updateHUD(dt) {
   }
   els.grenades.textContent = `${p.grenades}/${MAX_GRENADES}`;
   els.meds.textContent = `${p.meds}/${p.medMax || MAX_MEDS}`;
+  if (els.slot2) els.slot2.textContent = p.slots && p.slots[1] ? weaponName(p.slots[1]) : 'Vacío';
+  if (els.gloo) els.gloo.textContent = `x${p.gloo}`;
   els.feed.textContent = G.feed.map((f) => f.text).join('\n');
 
   // Mira: se abre al disparar y al moverse, se cierra al apuntar

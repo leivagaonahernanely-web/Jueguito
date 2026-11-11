@@ -323,6 +323,9 @@ export function createView(canvas) {
   const chestBandMat = new THREE.MeshStandardMaterial({ color: 0x5a3d10, roughness: 0.5, metalness: 0.4 });
   const chestBeam = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.16, depthWrite: false });
   const chestSpark = new THREE.MeshBasicMaterial({ color: 0xffd23f });
+  const glooWallMat = new THREE.MeshStandardMaterial({ color: 0x7fd0ff, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.82, emissive: 0x1a5f8a, emissiveIntensity: 0.45 });
+  const glooBeamMat = new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.18, depthWrite: false });
+  const glooSparkMat = new THREE.MeshBasicMaterial({ color: 0x9fe4ff });
   const playerRingMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
 
   // ----- Modelos de arma (origen en la empuñadura, cañón hacia +z) -----
@@ -1260,6 +1263,15 @@ export function createView(canvas) {
       const beam = new THREE.Mesh(geo.beam, grenadeBeam);
       beam.position.y = 4.5;
       g.add(beam);
+    } else if (it.kind === 'gloo') {
+      const wall = new THREE.Mesh(geo.medBox, glooWallMat);
+      wall.scale.set(0.85, 0.55, 0.85);
+      wall.position.y = 0.3;
+      wall.castShadow = true;
+      g.add(wall);
+      const beam = new THREE.Mesh(geo.beam, glooBeamMat);
+      beam.position.y = 4.5;
+      g.add(beam);
     } else {
       const a = new THREE.Mesh(geo.armorBox, M.olive);
       a.position.y = 0.25;
@@ -1620,6 +1632,30 @@ export function createView(canvas) {
     }
   }
 
+  // Muros de hielo desplegados: se ven y se encogen según la vida que les queda
+  const glooMeshes = new Map();
+  function syncGloos() {
+    for (const o of G.obstacles) {
+      if (o.kind !== 'gloo') continue;
+      let m = glooMeshes.get(o);
+      if (!m) {
+        m = new THREE.Mesh(new THREE.BoxGeometry(o.w, o.h, o.d), glooWallMat);
+        m.position.set(o.x + o.w / 2, o.h / 2, o.z + o.d / 2);
+        m.castShadow = true;
+        glooMeshes.set(o, m);
+        scene.add(m);
+      }
+      if (o.gone) {
+        m.visible = false;
+        continue;
+      }
+      m.visible = true;
+      const k = Math.max(0.55, o.hp / o.maxHp);
+      m.scale.y = k;
+      m.position.y = (o.h * k) / 2;
+    }
+  }
+
   function syncBullets() {
     for (const b of G.bullets) {
       let m = tracers.get(b);
@@ -1726,6 +1762,8 @@ export function createView(canvas) {
         if (v) spawnDamageNumber(v.x + (Math.random() - 0.5) * 0.5, 1.4 + Math.random() * 0.4, v.z, ev.amt || 0, ev.head);
       } else if (ev.type === 'chest') {
         spawnSparks(ev.x, 0.9, ev.z, 16, chestSpark);
+      } else if (ev.type === 'glooBreak') {
+        spawnSparks(ev.x, 1.2, ev.z, 18, glooSparkMat);
       } else if (ev.type === 'kill') {
         shake = Math.max(shake, 0.25);
       } else if (ev.type === 'hurt') {
@@ -1810,6 +1848,7 @@ export function createView(canvas) {
     consumeEvents();
     updateDamageNumbers(dt);
     syncChests();
+    syncGloos();
 
     if (G.player && worldGroup) {
       const p = G.player;

@@ -416,6 +416,23 @@ body::after {
 }
 #btnSprint .lbl, #btnSprint .ico { color: #3e2a00; }
 #btnSprint .ico svg { color: #3e2a00; }
+#btnSwap {
+  right: 240px; bottom: calc(env(safe-area-inset-bottom, 0px) + 152px);
+  width: 54px; height: 54px; border-radius: 50%;
+  border-color: rgba(180, 190, 255, 0.55);
+}
+#btnGloo {
+  right: 240px; bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+  width: 58px; height: 58px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #b3ecff, #0277bd 72%);
+  border-color: rgba(190, 240, 255, 0.55);
+  box-shadow: 0 10px 24px rgba(2, 119, 189, 0.5), 0 0 18px rgba(79, 195, 247, 0.35), inset 0 2px 0 rgba(255, 255, 255, 0.4);
+}
+#slot2 {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  opacity: 0.75; color: var(--gold);
+}
+#btnSprint .ico svg { color: #3e2a00; }
 
 @media (pointer: coarse) {
   .btn { display: flex; }

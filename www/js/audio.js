@@ -111,6 +111,11 @@ export function playChest() {
   setTimeout(() => tone(1320, 0.16, { type: 'triangle', gain: 0.2 }), 200);
 }
 
+export function playGloo() {
+  tone(320, 0.16, { type: 'sine', gain: 0.3, endFreq: 90 });
+  setTimeout(() => tone(1500, 0.22, { type: 'triangle', gain: 0.14, endFreq: 900 }), 70);
+}
+
 export function playHeal() {
   tone(520, 0.2, { type: 'sine', gain: 0.2, endFreq: 980 });
 }
