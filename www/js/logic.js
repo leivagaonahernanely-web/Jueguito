@@ -26,9 +26,16 @@ export const G = {
   playerName: 'Tú',
   airdrop: null,          // { x, z, ids, t } suministro activo en el mapa (marcador en el minimapa)
   airdropT: 0,            // segundos hasta el próximo suministro
+  chests: [],             // arcas con mejor botín junto a las casas
 };
 
 const HOUSE_COLORS = ['#d7ccc8', '#bcaaa4', '#efebe9', '#ffe0b2', '#c5e1a5', '#b0bec5', '#f8bbd0', '#ffccbc'];
+
+// ---------- Salto en planeador ----------
+// La partida empieza en el aire: todos descienden y eligen dónde aterrizar.
+const GLIDE_START = 48;   // altura inicial en metros
+const GLIDE_FALL = 11;    // descenso en m/s (≈ 4,5 s de vuelo)
+const GLIDE_SPEED = 9;    // desplazamiento horizontal en m/s
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -208,6 +215,7 @@ function makeEntity(p, name, isPlayer, colorIdx, charId = 'recluta') {
     meds: 0, grenades: 0, cool: 0, bloom: 0, healT: 0, throwT: 0, shots: 0,
     yaw: 0, pitch: 0, recoilOff: 0, moving: false, walk: 0, flash: 0, ads: false,
     reactT: 0, retreat: false,
+    glide: false, dropX: p.x, dropZ: p.z,
     lastKiller: null, lastWeapon: '',
     // IA de bots
     target: null, goal: null, thinkT: 0, grenadeT: 0,
@@ -326,6 +334,7 @@ export function startReload(e) {
 }
 
 function fireWeapon(e, dir) {
+  if (e.glide) return;
   if (!e.alive || e.cool > 0 || e.reloadT > 0 || e.sprinting) return;
   const w = WEAPONS[e.weapon];
   if (e.ammo <= 0) { startReload(e); return; }
@@ -356,6 +365,7 @@ function fireWeapon(e, dir) {
 }
 
 export function throwGrenade(e, dir) {
+  if (e.glide) return;
   if (!e.alive || e.grenades <= 0 || e.throwT > 0) return;
   e.grenades--;
   e.throwT = 0.45;
@@ -388,7 +398,13 @@ function damage(e, amt, src, label = '', head = false) {
   e.lastKiller = src ? src.name : '';
   e.lastWeapon = label;
   if (e.isPlayer && src !== e) G.events.push({ type: 'hurt', amt, sx: src ? src.x : null, sz: src ? src.z : null });
-  if (src && src.isPlayer && e !== src) G.events.push({ type: 'hit', victim: e.id, head });
+  if (src && src.isPlayer && e !== src) G.events.push({ type: 'hit', victim: e.id, head, amt: Math.round(amt) });
+  // El bot gira hacia quien le disparó enseguida (como un jugador atento)
+  if (!e.isPlayer && e.alive && src && src !== e && src.alive && e.reactT <= 0) {
+    e.target = src;
+    e.reactT = 0.2;
+    e.thinkT = Math.min(e.thinkT, 0.1);
+  }
   if (e.hp <= 0) kill(e, src, label);
 }
 
@@ -422,6 +438,7 @@ function kill(e, src, label) {
 }
 
 function tryPickup(e) {
+  if (e.glide) return;
   for (let i = G.loot.length - 1; i >= 0; i--) {
     const it = G.loot[i];
     if (it.lock > 0) continue;
@@ -597,6 +614,17 @@ function updatePlayer(dt, input) {
   p.pitch = clamp(p.pitch + input.dpitch, -0.9, 0.9);
   p.ads = !!input.ads;
 
+  // Planeador: se dirige con el joystick hacia el punto de aterrizaje, sin disparar
+  if (p.glide) {
+    let fwd = input.forward, str = input.strafe;
+    const m = Math.hypot(fwd, str);
+    if (m > 1) { fwd /= m; str /= m; }
+    const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
+    const rx = -fz, rz = fx;
+    moveEnt(p, (fx * fwd + rx * str) * GLIDE_SPEED * dt, (fz * fwd + rz * str) * GLIDE_SPEED * dt);
+    return;
+  }
+
   let fwd = input.forward, str = input.strafe;
   const m = Math.hypot(fwd, str);
   if (m > 1) { fwd /= m; str /= m; }
@@ -633,6 +661,10 @@ function updatePlayer(dt, input) {
 
 // ---------- Bots ----------
 function updateBot(b, dt) {
+  if (b.glide) {
+    stepToward(b, b.dropX, b.dropZ, GLIDE_SPEED, dt);
+    return;
+  }
   if (b.reactT > 0) b.reactT -= dt;
   b.thinkT -= dt;
   if (b.thinkT <= 0) {
@@ -737,12 +769,17 @@ export function startMatch(name = 'Tú', charId = 'recluta') {
   const ps = freeSpot();
   G.player = makeEntity(ps, G.playerName, true, 0, CHARACTERS[charId] ? charId : 'recluta');
   G.player.grenades = 1;
+  G.player.y = GLIDE_START;
+  G.player.glide = true;
   G.airdrop = null;
   G.airdropT = AIRDROP_FIRST;
   for (let i = 0; i < BOT_COUNT; i++) {
     const s = freeSpot();
     const bot = CHARACTER_IDS[(Math.random() * CHARACTER_IDS.length) | 0];
-    G.bots.push(makeEntity(s, `Bot ${i + 1}`, false, 1 + (i % 7), bot));
+    const b = makeEntity(s, `Bot ${i + 1}`, false, 1 + (i % 7), bot);
+    b.y = GLIDE_START;
+    b.glide = true;
+    G.bots.push(b);
   }
   G.entities = [G.player, ...G.bots];
 
@@ -760,12 +797,35 @@ export function startMatch(name = 'Tú', charId = 'recluta') {
   addLoot('grenade', LOOT_GRENADES);
   addLoot('armor', LOOT_ARMOR);
 
+  // Arcas doradas junto a las casas: mejor botín para quien llegue primero
+  G.chests = [];
+  const chests = G.obstacles.filter((o) => o.shape === 'rect' && o.kind === 'casa');
+  for (const o of chests) {
+    if (Math.random() > 0.55) continue;
+    for (let tries = 0; tries < 8; tries++) {
+      const side = (Math.random() * 4) | 0;
+      const px = side === 0 ? o.x - 1.7 : side === 1 ? o.x + o.w + 1.7 : o.x + Math.random() * o.w;
+      const pz = side === 2 ? o.z - 1.7 : side === 3 ? o.z + o.d + 1.7 : o.z + Math.random() * o.d;
+      if (blockedAt(px, 0.5, pz)) continue;
+      G.chests.push({ id: G.nextId++, x: px, z: pz, open: false });
+      break;
+    }
+  }
+
   G.zone = {
     phase: 0, state: 'hold', t: 0,
     radius: ZONE_START_RADIUS, from: ZONE_START_RADIUS,
     cx: WORLD / 2, cz: WORLD / 2, fromCx: WORLD / 2, fromCz: WORLD / 2,
     tx: WORLD / 2, tz: WORLD / 2,
   };
+  // Cada bot elige su punto de aterrizaje: cerca de botín o adentro de la zona
+  for (const b of G.bots) {
+    const lootSpot = G.loot.length && Math.random() < 0.7 ? pick(G.loot) : null;
+    const dest = lootSpot || zoneSpot(20);
+    b.dropX = dest.x + rand(-6, 6);
+    b.dropZ = dest.z + rand(-6, 6);
+  }
+
   G.state = 'playing';
 }
 
@@ -808,6 +868,28 @@ function endGame(won) {
   G.place = won ? 1 : G.bots.filter((b) => b.alive).length + 1;
 }
 
+// ---------- Arcas con mejor botín ----------
+function updateChests(dt) {
+  for (const c of G.chests) {
+    if (c.open) continue;
+    let opener = null;
+    for (const e of G.entities) {
+      if (!e.alive || e.glide) continue;
+      if (Math.hypot(e.x - c.x, e.z - c.z) < 1.4) { opener = e; break; }
+    }
+    if (!opener) continue;
+    c.open = true;
+    // Botín de calidad: arma buena + suministro extra, a veces un tercer objeto
+    const goodWeapons = Object.keys(WEAPONS).filter((k) => k !== 'pistola');
+    const gx = () => c.x + rand(-1.2, 1.2);
+    const gz = () => c.z + rand(-1.2, 1.2);
+    G.loot.push({ id: G.nextId++, x: gx(), z: gz(), kind: 'weapon', weapon: pick(goodWeapons), lock: 0 });
+    G.loot.push({ id: G.nextId++, x: gx(), z: gz(), kind: pick(['med', 'med', 'grenade', 'armor']), lock: 0 });
+    if (Math.random() < 0.35) G.loot.push({ id: G.nextId++, x: gx(), z: gz(), kind: 'med', lock: 0 });
+    G.events.push({ type: 'chest', x: c.x, z: c.z });
+  }
+}
+
 function checkWin() {
   if (G.state === 'playing' && G.player.alive && G.bots.every((b) => !b.alive)) endGame(true);
 }
@@ -818,6 +900,10 @@ export function update(dt, input) {
 
   for (const e of G.entities) {
     e.moving = false;
+    if (e.glide) {
+      e.y -= GLIDE_FALL * dt;
+      if (e.y <= 0) { e.y = 0; e.vy = 0; e.glide = false; }
+    }
     if (e.cool > 0) e.cool -= dt;
     if (e.flash > 0) e.flash -= dt;
     if (e.healT > 0) e.healT -= dt;
@@ -842,6 +928,7 @@ export function update(dt, input) {
   updatePlayer(dt, input);
   for (const b of G.bots) if (b.alive) updateBot(b, dt);
   updateAirdrops(dt);
+  updateChests(dt);
   updateBullets(dt);
   updateGrenades(dt);
 

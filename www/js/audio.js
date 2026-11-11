@@ -105,6 +105,12 @@ export function playPickup() {
   setTimeout(() => tone(1320, 0.1, { type: 'triangle', gain: 0.2 }), 70);
 }
 
+export function playChest() {
+  tone(660, 0.09, { type: 'triangle', gain: 0.22 });
+  setTimeout(() => tone(990, 0.1, { type: 'triangle', gain: 0.22 }), 90);
+  setTimeout(() => tone(1320, 0.16, { type: 'triangle', gain: 0.2 }), 200);
+}
+
 export function playHeal() {
   tone(520, 0.2, { type: 'sine', gain: 0.2, endFreq: 980 });
 }

@@ -339,7 +339,7 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 function showEnd() {
-  els.endTitle.textContent = G.won ? '¡VICTORIA!' : 'ELIMINADO';
+  els.endTitle.textContent = G.won ? '¡BOOYAH!' : 'ELIMINADO';
   const kills = G.player ? G.player.kills : 0;
   els.endText.textContent = `Puesto #${G.place} de ${G.entities.length} · Bajas: ${kills}`;
   show(els.end);
@@ -387,6 +387,9 @@ function handleEvents() {
         break;
       case 'airdrop':
         SFX.playPickup();
+        break;
+      case 'chest':
+        SFX.playChest();
         break;
       case 'reload':
         if (ev.id === p.id) SFX.playReload();

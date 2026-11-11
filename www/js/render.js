@@ -195,6 +195,8 @@ export function createView(canvas) {
     sandbag: new RoundedBoxGeometry(0.62, 0.28, 0.34, 2, 0.1),
     fencePost: box(0.14, 1.1, 0.14),
     fenceRail: box(2.5, 0.09, 0.06),
+    chestBody: new RoundedBoxGeometry(0.95, 0.55, 0.6, 2, 0.08),
+    chestLid: new RoundedBoxGeometry(0.95, 0.22, 0.6, 2, 0.08),
     lampPole: new THREE.CylinderGeometry(0.06, 0.08, 4.2, 6),
     lampHead: new THREE.SphereGeometry(0.22, 10, 8),
     tracer: box(0.035, 0.035, 1),
@@ -317,6 +319,10 @@ export function createView(canvas) {
   const barrelMats = [0x2f5f8f, 0x8f3a2f, 0x4a6b3a].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.3 }));
   const sandbagMat = new THREE.MeshStandardMaterial({ color: 0x9a8a5e, roughness: 1 });
   const fenceMat = new THREE.MeshStandardMaterial({ color: 0x7a5a38, roughness: 1 });
+  const chestMat = new THREE.MeshStandardMaterial({ color: 0xd4a017, roughness: 0.35, metalness: 0.6 });
+  const chestBandMat = new THREE.MeshStandardMaterial({ color: 0x5a3d10, roughness: 0.5, metalness: 0.4 });
+  const chestBeam = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.16, depthWrite: false });
+  const chestSpark = new THREE.MeshBasicMaterial({ color: 0xffd23f });
   const playerRingMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
 
   // ----- Modelos de arma (origen en la empuñadura, cañón hacia +z) -----
@@ -1017,11 +1023,31 @@ export function createView(canvas) {
       root.add(ring);
     }
 
+    const wing = addGlider(root, topColor);
     return {
-      root, body, legs: [], arms: [], vest: { visible: false }, shirtMat: null, gunPivot, guns, ring,
+      root, body, legs: [], arms: [], vest: { visible: false }, shirtMat: null, gunPivot, guns, ring, wing,
       weapon: null, shotsSeen: 0, kick: 0, dead: false, deathT: 0, lean: 0,
       bones, hand: model.getObjectByName('RightHand'), animated: true,
     };
+  }
+
+  // Ala del planeador: aparece sobre la cabeza durante el descenso inicial
+  function addGlider(root, colorHex) {
+    const wing = new THREE.Group();
+    const canopy = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 16, 8, 0, TAU, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.6, side: THREE.DoubleSide }),
+    );
+    canopy.scale.set(1.5, 0.5, 1.0);
+    canopy.position.y = 2.7;
+    canopy.castShadow = true;
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.3, 6), M.dark);
+    bar.rotation.x = 1.15;
+    bar.position.y = 2.15;
+    wing.add(canopy, bar);
+    wing.visible = false;
+    root.add(wing);
+    return wing;
   }
 
   // e: entidad del juego. Su `look` define colores según el personaje elegido en el lobby.
@@ -1153,8 +1179,9 @@ export function createView(canvas) {
       root.add(ring);
     }
 
+    const wing = addGlider(root, shirtMat.color.getHex());
     return {
-      root, body, legs, arms, vest, shirtMat, gunPivot, guns, ring,
+      root, body, legs, arms, vest, shirtMat, gunPivot, guns, ring, wing,
       weapon: null, shotsSeen: 0, kick: 0, dead: false, deathT: 0, lean: 0,
     };
   }
@@ -1406,6 +1433,7 @@ export function createView(canvas) {
       setWeaponModel(ch, e.weapon);
       ch.root.position.set(e.x, e.y || 0, e.z);
       ch.root.rotation.y = e.yaw;
+      if (ch.wing) ch.wing.visible = !!(e.glide && e.alive);
       // Agachado: el cuerpo se encoge desde los pies
       ch.body.scale.y += ((e.crouch ? 0.7 : 1) - ch.body.scale.y) * Math.min(1, dt * 12);
       ch.vest.visible = e.armor > 0;
@@ -1526,6 +1554,40 @@ export function createView(canvas) {
     }
   }
 
+  // Arcas doradas: aparecen junto a las casas y se abren al acercarse
+  const chestMeshes = new Map();
+  function syncChests() {
+    for (const c of G.chests) {
+      let m = chestMeshes.get(c.id);
+      if (!m) {
+        m = new THREE.Group();
+        const body = new THREE.Mesh(geo.chestBody, chestMat);
+        body.position.y = 0.28;
+        body.castShadow = true;
+        const lid = new THREE.Mesh(geo.chestLid, chestMat);
+        lid.position.set(0, 0.68, -0.28);
+        lid.castShadow = true;
+        const band = new THREE.Mesh(geo.chestBody, chestBandMat);
+        band.scale.set(1.02, 0.18, 1.04);
+        band.position.y = 0.42;
+        const beam = new THREE.Mesh(geo.beam, chestBeam);
+        beam.position.y = 4.5;
+        m.add(body, lid, band, beam);
+        m.userData.lid = lid;
+        m.userData.beam = beam;
+        m.position.set(c.x, 0, c.z);
+        m.rotation.y = Math.random() * TAU;
+        chestMeshes.set(c.id, m);
+        scene.add(m);
+      }
+      if (c.open !== m.userData.opened) {
+        m.userData.opened = c.open;
+        m.userData.lid.rotation.x = c.open ? -1.15 : 0;
+        m.userData.beam.visible = !c.open;
+      }
+    }
+  }
+
   function syncBullets() {
     for (const b of G.bullets) {
       let m = tracers.get(b);
@@ -1572,6 +1634,46 @@ export function createView(canvas) {
     }
   }
 
+  // Números de daño flotantes estilo Free Fire
+  const dmgNums = [];
+  let dmgLayer = null;
+  function spawnDamageNumber(x, y, z, amt, head) {
+    if (!dmgLayer) {
+      dmgLayer = document.createElement('div');
+      dmgLayer.style.cssText = 'position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:5;';
+      document.body.appendChild(dmgLayer);
+    }
+    const el = document.createElement('div');
+    el.textContent = String(amt);
+    const size = head ? 27 : 19;
+    const col = head ? '#ffd23f' : '#ffffff';
+    el.style.cssText = `position:absolute;font-weight:900;font-style:italic;transform:translate(-50%,-50%);color:${col};font-size:${size}px;text-shadow:0 2px 4px rgba(0,0,0,.85),0 0 10px rgba(0,0,0,.5);will-change:left,top,opacity;`;
+    dmgLayer.appendChild(el);
+    dmgNums.push({ el, x, y, z, life: 0.9, max: 0.9 });
+  }
+
+  function updateDamageNumbers(dt) {
+    if (!dmgNums.length) return;
+    for (let i = dmgNums.length - 1; i >= 0; i--) {
+      const n = dmgNums[i];
+      n.life -= dt;
+      n.y += dt * 1.4;
+      if (n.life <= 0) {
+        n.el.remove();
+        dmgNums.splice(i, 1);
+        continue;
+      }
+      tmpV.set(n.x, n.y, n.z).project(camera);
+      if (tmpV.z > 1) {
+        n.el.style.opacity = '0';
+        continue;
+      }
+      n.el.style.left = `${(tmpV.x * 0.5 + 0.5) * window.innerWidth}px`;
+      n.el.style.top = `${(-tmpV.y * 0.5 + 0.5) * window.innerHeight}px`;
+      n.el.style.opacity = String(Math.min(1, n.life / 0.4));
+    }
+  }
+
   function consumeEvents() {
     for (const ev of G.events) {
       if (ev.type === 'shot') {
@@ -1587,6 +1689,11 @@ export function createView(canvas) {
         else spawnSparks(ev.x, ev.y, ev.z, 6);
       } else if (ev.type === 'explosion') {
         spawnExplosion(ev.x, ev.y, ev.z, ev.radius);
+      } else if (ev.type === 'hit') {
+        const v = G.entities.find((en) => en.id === ev.victim);
+        if (v) spawnDamageNumber(v.x + (Math.random() - 0.5) * 0.5, 1.4 + Math.random() * 0.4, v.z, ev.amt || 0, ev.head);
+      } else if (ev.type === 'chest') {
+        spawnSparks(ev.x, 0.9, ev.z, 16, chestSpark);
       } else if (ev.type === 'kill') {
         shake = Math.max(shake, 0.25);
       } else if (ev.type === 'hurt') {
@@ -1669,6 +1776,8 @@ export function createView(canvas) {
 
   function render(dt, t) {
     consumeEvents();
+    updateDamageNumbers(dt);
+    syncChests();
 
     if (G.player && worldGroup) {
       const p = G.player;
