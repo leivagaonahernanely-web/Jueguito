@@ -126,6 +126,21 @@ export function createView(canvas) {
     ring: new THREE.CircleGeometry(0.62, 32),
   };
 
+  // Texturas fotográficas (examples de Three.js): hierba y ladrillo con relieve y rugosidad
+  const texLoader = new THREE.TextureLoader();
+  function loadTex(path, srgb, rx, ry) {
+    const t = texLoader.load(path);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx, ry);
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 8;
+    return t;
+  }
+  const grassMap = loadTex('assets/tex/grasslight-big.jpg', true, WORLD / 14, WORLD / 14);
+  const brickMap = loadTex('assets/tex/brick_diffuse.jpg', true, 1, 1);
+  const brickBump = loadTex('assets/tex/brick_bump.jpg', false, 1, 1);
+  const brickRough = loadTex('assets/tex/brick_roughness.jpg', false, 1, 1);
+
   // Textura de pared: estuco con grano, usada como color y como relieve
   const wallTex = (() => {
     const c = document.createElement('canvas');
@@ -330,7 +345,7 @@ export function createView(canvas) {
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(WORLD, WORLD),
-      new THREE.MeshStandardMaterial({ map: makeGroundTexture(), roughness: 1 }),
+      new THREE.MeshStandardMaterial({ map: grassMap, roughness: 1 }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(WORLD / 2, 0, WORLD / 2);
@@ -367,10 +382,21 @@ export function createView(canvas) {
       worldGroup.add(plinth);
 
       // Pared con textura de estuco y relieve (bump)
-      const wt = wallTex.clone();
-      wt.repeat.set(Math.max(1, o.w / 4), Math.max(1, o.h / 4));
-      wt.needsUpdate = true;
-      const wallMat = new THREE.MeshStandardMaterial({ color: o.color, map: wt, bumpMap: wt, bumpScale: 0.6, roughness: 0.85 });
+      let wallMat;
+      if (Math.random() < 0.5) {
+        // Ladrillo visto: tono cálido con textura real de relieve y rugosidad
+        const rep = (t) => { const c = t.clone(); c.repeat.set(Math.max(1, o.w / 3), Math.max(1, o.h / 3)); c.needsUpdate = true; return c; };
+        wallMat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(o.color).lerp(new THREE.Color(0xffffff), 0.55),
+          map: rep(brickMap), bumpMap: rep(brickBump), bumpScale: 1.2, roughnessMap: rep(brickRough), roughness: 1,
+        });
+      } else {
+        // Estuco pintado
+        const wt = wallTex.clone();
+        wt.repeat.set(Math.max(1, o.w / 4), Math.max(1, o.h / 4));
+        wt.needsUpdate = true;
+        wallMat = new THREE.MeshStandardMaterial({ color: o.color, map: wt, bumpMap: wt, bumpScale: 0.6, roughness: 0.85 });
+      }
       const wall = new THREE.Mesh(box(o.w, o.h, o.d), wallMat);
       wall.position.set(o.x + o.w / 2, o.h / 2, o.z + o.d / 2);
       wall.castShadow = true;
@@ -571,56 +597,81 @@ export function createView(canvas) {
   }
 
   // ----- Personajes -----
-  // ----- Modelo de soldado (Mixamo, con animaciones reales) -----
-  let soldier = null;        // GLTF cargado
-  let soldierScale = 1;      // escala para que mida 1.8 m
-  let soldierMinY = 0;       // altura de los pies del modelo original
+  // ----- Personaje con aspecto de videojuego: avatar realista + animaciones de Mixamo -----
+  let avatar = null;         // GLTF del avatar (cuerpo, cabeza, ropa separada por materiales)
+  let avatarScale = 1;       // escala para que mida 1.8 m
+  let avatarMinY = 0;        // altura de los pies del modelo original
   const tmpV = new THREE.Vector3();
 
-  function loadSoldier() {
-    new GLTFLoader().loadAsync('assets/soldier.glb').then((g) => {
-      const box = new THREE.Box3().setFromObject(g.scene);
-      const h = box.max.y - box.min.y;
-      soldierScale = 1.8 / h;
-      soldierMinY = box.min.y;
-      soldier = g;
-    }).catch((err) => console.warn('Modelo de soldado no disponible, se usa el modelo simple:', err));
+  function loadAvatar() {
+    new GLTFLoader().loadAsync('assets/avatar.glb').then((av) => {
+      const box = new THREE.Box3().setFromObject(av.scene);
+      avatarScale = 1.8 / (box.max.y - box.min.y);
+      avatarMinY = box.min.y;
+      avatar = av;
+    }).catch((err) => console.warn('Avatar no disponible, se usa el personaje simple:', err));
   }
 
-  function playAnim(ch, name) {
-    if (ch.current === name || !ch.actions[name]) return;
-    const next = ch.actions[name];
-    const prev = ch.actions[ch.current];
-    next.reset().fadeIn(0.2).play();
-    if (prev) prev.fadeOut(0.2);
-    ch.current = name;
+  // Rotación de un hueso sobre su eje X local, compuesta con la postura de reposo
+  const _poseQ = new THREE.Quaternion();
+  const _zAxis = new THREE.Vector3(0, 0, 1);
+  const _xAxis = new THREE.Vector3(1, 0, 0);
+  function setBone(ch, name, ang, axis = _xAxis) {
+    const bn = ch.bones[name];
+    if (!bn) return;
+    _poseQ.setFromAxisAngle(axis, ang);
+    bn.b.quaternion.copy(bn.rest).multiply(_poseQ);
   }
 
-  function buildSoldierCharacter(e) {
+  // Pose del avatar: piernas al caminar, brazos al frente para sostener el arma
+  // Brazos al frente: el eje Z y el signo se comprobaron viendo el personaje de frente
+  const ARM_RAISE = -1.25;
+  function poseAvatar(ch, e) {
+    const sw = e.moving ? Math.sin(e.walk) * (e.sprinting ? 0.9 : 0.5) : 0;
+    setBone(ch, 'LeftUpLeg', sw);
+    setBone(ch, 'RightUpLeg', -sw);
+    const aim = e.alive ? ARM_RAISE : 0;
+    setBone(ch, 'LeftArm', aim, _zAxis);
+    setBone(ch, 'RightArm', aim, _zAxis);
+    setBone(ch, 'LeftForeArm', aim * 0.35, _zAxis);
+    setBone(ch, 'RightForeArm', aim * 0.35, _zAxis);
+  }
+
+  function buildAvatarCharacter(e) {
     const look = e.look || {};
     const root = new THREE.Group();
-    const model = SkeletonUtils.clone(soldier.scene);
-    model.scale.setScalar(soldierScale);
-    model.position.y = -soldierMinY * soldierScale;
+    const model = SkeletonUtils.clone(avatar.scene);
+    model.scale.setScalar(avatarScale);
+    model.position.y = -avatarMinY * avatarScale;
     // "body" es el grupo que mueve la animación de caminar; el modelo va dentro con su ajuste de pies
     const body = new THREE.Group();
     body.add(model);
     root.add(body);
 
-    // Color del uniforme según el personaje (los bots usan la paleta)
-    const tint = new THREE.Color(e.isPlayer ? (look.shirt ?? SHIRT_FOR_PLAYER) : SHIRTS[e.colorIdx % SHIRTS.length]);
+    // Ropa según el personaje (los bots usan la paleta de camisetas)
+    // Colores de ropa algo apagados: se ven más como tela real que como plástico
+    const topColor = new THREE.Color(e.isPlayer ? (look.shirt ?? SHIRT_FOR_PLAYER) : SHIRTS[e.colorIdx % SHIRTS.length]).lerp(new THREE.Color(0x4a4a4a), 0.3);
+    const pantsColor = new THREE.Color(look.pants ?? 0x2b3a46);
+    const bootsColor = new THREE.Color(0x1b1412);
     model.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
       o.receiveShadow = true;
       o.material = o.material.clone();
-      if (o.material.name === 'VanguardBodyMat') o.material.color.copy(tint).multiplyScalar(0.55);
+      const n = o.material.name;
+      if (n === 'Wolf3D_Outfit_Top') o.material.color.copy(topColor);
+      else if (n === 'Wolf3D_Outfit_Bottom') o.material.color.copy(pantsColor);
+      else if (n === 'Wolf3D_Outfit_Footwear') o.material.color.copy(bootsColor);
+      else if (n === 'Wolf3D_Headwear' && look.helmet != null) o.material.color.set(look.helmet);
+      else if (n === 'Wolf3D_Headwear' && look.hair != null) o.material.color.set(look.hair);
     });
 
-    const mixer = new THREE.AnimationMixer(model);
-    const actions = {};
-    for (const clip of soldier.animations) actions[clip.name] = mixer.clipAction(clip);
-    actions.Idle?.play();
+    // Huesos que movemos a mano, guardando su postura de reposo para componer las rotaciones
+    const bones = {};
+    for (const n of ['Hips', 'Spine', 'LeftUpLeg', 'RightUpLeg', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm']) {
+      const b = model.getObjectByName(n);
+      if (b) bones[n] = { b, rest: b.quaternion.clone() };
+    }
 
     const gunPivot = new THREE.Group();
     root.add(gunPivot);
@@ -643,16 +694,13 @@ export function createView(canvas) {
     return {
       root, body, legs: [], arms: [], vest: { visible: false }, shirtMat: null, gunPivot, guns, ring,
       weapon: null, shotsSeen: 0, kick: 0, dead: false, deathT: 0, lean: 0,
-      mixer, actions, current: 'Idle',
-      // Three.js quita los dos puntos de los nombres: el hueso se llama "mixamorigRightHand"
-      hand: model.getObjectByName('mixamorigRightHand') || model.getObjectByName('mixamorig:RightHand'),
-      animated: true,
+      bones, hand: model.getObjectByName('RightHand'), animated: true,
     };
   }
 
   // e: entidad del juego. Su `look` define colores según el personaje elegido en el lobby.
   function buildCharacter(e) {
-    if (soldier) return buildSoldierCharacter(e);
+    if (avatar) return buildAvatarCharacter(e);
     const isPlayer = e.isPlayer;
     const look = e.look || {};
     const root = new THREE.Group();
@@ -1017,11 +1065,7 @@ export function createView(canvas) {
       ch.root.position.set(e.x, 0, e.z);
       ch.root.rotation.y = e.yaw;
       ch.vest.visible = e.armor > 0;
-      if (ch.animated) {
-        const want = !e.alive ? 'Idle' : e.sprinting ? 'Run' : e.moving ? 'Walk' : 'Idle';
-        playAnim(ch, want);
-        ch.mixer.update(dt);
-      }
+      if (ch.animated) poseAvatar(ch, e);
 
       if (!e.alive) {
         if (!ch.dead) {
@@ -1332,6 +1376,6 @@ export function createView(canvas) {
   buildWorld();
   applyQuality(quality);
 
-  loadSoldier();
+  loadAvatar();
   return { render, reset, resize, buildWorld, loadPost, applyQuality, get lamps() { return lampRefs; } };
 }

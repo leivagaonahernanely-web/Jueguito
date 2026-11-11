@@ -86,10 +86,11 @@ El APK queda en `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Visual
 
-- Casas con tejado a dos aguas, zócalo de piedra, chimenea, alféizares y pared con textura de estuco y relieve.
-- Personajes: modelo de soldado animado (`www/assets/soldier.glb`, del ejemplo de Three.js, basado en Mixamo) con idle, caminar y correr. Si el modelo no carga, se usa un personaje simple de respaldo.
-- Licencia: revisa los términos de Mixamo y de los ejemplos de Three.js antes de publicar el juego con fines comerciales.
-- Personajes simples de respaldo, hombros, cara con ojos y nariz, y pelo o casco según el personaje. Los modelos son procedurales (sin archivos de arte); para un realismo mayor harían falta modelos 3D externos.
+- Casas con tejado a dos aguas, zócalo de piedra, chimenea, alféizares y paredes de ladrillo o estuco con relieve.
+- Suelo de hierba con textura fotográfica (`www/assets/tex/`, de los ejemplos de Three.js).
+- Personajes: avatar de videojuego con cara, ropa y cabello separados (`www/assets/avatar.glb`, del ejemplo de Three.js, de Ready Player Me). Los brazos y las piernas se mueven por código para apuntar y caminar.
+- Licencia: revisa los términos de Ready Player Me y de los ejemplos de Three.js antes de publicar el juego con fines comerciales.
+- Si el avatar no carga, se usa un personaje simple de respaldo (procedural).
 
 ## Estructura
 
