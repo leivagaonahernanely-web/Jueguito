@@ -1327,6 +1327,12 @@ export function createView(canvas) {
     const high = q === 'alta';
     renderer.shadowMap.enabled = high;
     sun.castShadow = high;
+    // Sombras más definidas en calidad alta, como en PUBG Mobile
+    if (sun.shadow) {
+      sun.shadow.mapSize.set(high ? 2048 : 1024, high ? 2048 : 1024);
+      if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    }
+    try { document.body.classList.toggle('high-gfx', high); } catch (_) { /* sin DOM en pruebas */ }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, high ? (IS_TOUCH ? 1.5 : 2) : 1));
     if (bloomPass) bloomPass.enabled = high;
     if (composer) usePost = high;   // en baja se dibuja directo, sin pases extra
@@ -1745,6 +1751,7 @@ export function createView(canvas) {
   const dmgNums = [];
   let dmgLayer = null;
   function spawnDamageNumber(x, y, z, amt, head) {
+  try { const st = JSON.parse(localStorage.getItem('br3d') || '{}'); if (st.dmgNums === false) return; } catch (_) { /* sin almacenamiento */ }
     if (!dmgLayer) {
       dmgLayer = document.createElement('div');
       dmgLayer.style.cssText = 'position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:5;';

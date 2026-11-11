@@ -18,6 +18,7 @@
 </head>
 <body>
   <canvas id="game"></canvas>
+  <div id="grain" aria-hidden="true"></div>
 
   <div id="damage"></div>
   <div id="hitmarker"></div>
@@ -117,6 +118,11 @@
       <label class="field">Volumen <span id="volVal"></span>
         <input id="vol" type="range" min="0" max="1" step="0.05">
       </label>
+      <label class="field">Sensibilidad al apuntar <span id="sensAdsVal"></span>
+        <input id="sensAds" type="range" min="0.3" max="2.5" step="0.05">
+      </label>
+      <label class="field row"><input id="autoSprint" type="checkbox"> Correr automáticamente al empujar el joystick</label>
+      <label class="field row"><input id="dmgNums" type="checkbox"> Mostrar números de daño</label>
       <label class="field">Calidad gráfica
         <select id="quality">
           <option value="alta">Alta (sombras y brillo)</option>

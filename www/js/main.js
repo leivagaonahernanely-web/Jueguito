@@ -26,6 +26,7 @@ const els = {
   menu: $('menu'), name: $('name'), play: $('play'),
   openControls: $('openControls'), openSettings: $('openSettings'),
   settings: $('settings'), sens: $('sens'), sensVal: $('sensVal'), vol: $('vol'), volVal: $('volVal'),
+  sensAds: $('sensAds'), sensAdsVal: $('sensAdsVal'), autoSprint: $('autoSprint'), dmgNums: $('dmgNums'),
   quality: $('quality'), backSettings: $('backSettings'), resetSettings: $('resetSettings'),
   openSettingsPause: $('openSettingsPause'),
   controls: $('controls'), backControls: $('backControls'),
@@ -44,7 +45,7 @@ window.addEventListener('unhandledrejection', (e) => showFatal(String(e.reason?.
 
 // ----- Ajustes persistentes -----
 const isTouchSettings = window.matchMedia('(pointer: coarse)').matches;
-const DEFAULTS = { sens: 1, vol: 0.6, quality: isTouchSettings ? 'baja' : 'alta', name: '', char: 'recluta' };
+const DEFAULTS = { sens: 1, sensAds: 1, vol: 0.6, quality: isTouchSettings ? 'baja' : 'alta', name: '', char: 'recluta', autoSprint: false, dmgNums: true };
 if (!CHARACTERS[DEFAULTS.char]) DEFAULTS.char = 'recluta';
 let settings = { ...DEFAULTS };
 try {
@@ -92,12 +93,16 @@ try {
 
 // Aplicar ajustes a la interfaz
 els.sens.value = settings.sens;
+els.sensAds.value = settings.sensAds;
 els.vol.value = settings.vol;
+els.autoSprint.checked = !!settings.autoSprint;
+els.dmgNums.checked = settings.dmgNums !== false;
 els.quality.value = settings.quality;
 els.name.value = settings.name;
 const refreshSettingsLabels = () => {
   els.sensVal.textContent = Number(settings.sens).toFixed(2);
   els.volVal.textContent = Math.round(settings.vol * 100) + '%';
+  if (els.sensAdsVal) els.sensAdsVal.textContent = Number(settings.sensAds).toFixed(2);
 };
 refreshSettingsLabels();
 
@@ -123,8 +128,11 @@ els.backSettings.addEventListener('click', () => {
 els.resetSettings.addEventListener('click', () => {
   settings = { ...DEFAULTS, name: settings.name, char: settings.char };
   els.sens.value = settings.sens;
+  els.sensAds.value = settings.sensAds;
   els.vol.value = settings.vol;
   els.quality.value = settings.quality;
+  els.autoSprint.checked = !!settings.autoSprint;
+  els.dmgNums.checked = settings.dmgNums !== false;
   refreshSettingsLabels();
   SFX.setVolume(settings.vol);
   view.applyQuality(settings.quality);
@@ -144,6 +152,19 @@ els.backControls.addEventListener('click', () => { hide(els.controls); show(els.
 els.sens.addEventListener('input', () => {
   settings.sens = Number(els.sens.value);
   refreshSettingsLabels();
+  saveSettings();
+});
+els.sensAds.addEventListener('input', () => {
+  settings.sensAds = Number(els.sensAds.value);
+  refreshSettingsLabels();
+  saveSettings();
+});
+els.autoSprint.addEventListener('change', () => {
+  settings.autoSprint = els.autoSprint.checked;
+  saveSettings();
+});
+els.dmgNums.addEventListener('change', () => {
+  settings.dmgNums = els.dmgNums.checked;
   saveSettings();
 });
 els.vol.addEventListener('input', () => {

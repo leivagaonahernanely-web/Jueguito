@@ -111,6 +111,15 @@ function forEachNear(minX, minZ, maxX, maxZ, fn) {
   }
 }
 
+// Preferencias guardadas (seguras también fuera del navegador, p. ej. en pruebas)
+export function readPref(key, def) {
+  try {
+    if (typeof localStorage === 'undefined') return def;
+    const all = JSON.parse(localStorage.getItem('br3d') || '{}');
+    return all[key] ?? def;
+  } catch (_) { return def; }
+}
+
 // ---------- Geometría del mapa ----------
 export function blockedAt(x, y, z) {
   let hit = false;
@@ -710,7 +719,8 @@ function updatePlayer(dt, input) {
     p.y += p.vy * dt;
     if (p.y <= 0) { p.y = 0; p.vy = 0; }
   }
-  const sprinting = !!input.sprint && fwd > 0.3 && !p.ads && !p.crouch && p.stamina > 0;
+  const autoRun = readPref('autoSprint', false) && fwd > 0.55;
+  const sprinting = (!!input.sprint || autoRun) && fwd > 0.3 && !p.ads && !p.crouch && p.stamina > 0;
   if (sprinting) {
     p.stamina = Math.max(0, p.stamina - STAMINA_DRAIN * dt);
   } else {
@@ -720,7 +730,13 @@ function updatePlayer(dt, input) {
   const speed = PLAYER_SPEED * p.speedMult * (p.ads ? ADS_SPEED_MULT : 1) * (p.crouch ? 0.6 : 1) * (p.sprinting ? SPRINT_MULT : 1) * (p.skillT > 0 && p.charId === 'recluta' ? 1.5 : 1);
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const rx = -fz, rz = fx;
-  moveEnt(p, (fx * fwd + rx * str) * speed * dt, (fz * fwd + rz * str) * speed * dt);
+  // Aceleración suave: la velocidad sube y baja en unos pasos en vez de saltar de golpe
+  const tx = (fx * fwd + rx * str) * speed;
+  const tz = (fz * fwd + rz * str) * speed;
+  const k = Math.min(1, dt * 11);
+  p.velX = (p.velX ?? 0) + (tx - (p.velX ?? 0)) * k;
+  p.velZ = (p.velZ ?? 0) + (tz - (p.velZ ?? 0)) * k;
+  moveEnt(p, p.velX * dt, p.velZ * dt);
 
   // Recuperación del retroceso: vuelve a la mira original cuando dejas de disparar
   if (!input.fire) p.recoilOff = Math.max(0, p.recoilOff - dt * (p.ads ? 2.4 : 1.6));

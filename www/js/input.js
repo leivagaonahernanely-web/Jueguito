@@ -17,8 +17,10 @@ export function createInput(canvas, els, settings) {
     crouchId: null,      // pointerId del botón de agacharse
   };
 
-  const sensMouse = () => 0.0022 * (settings.sens ?? 1);
-  const sensTouch = () => 0.0065 * (settings.sens ?? 1);
+  // La mira activa usa su propia sensibilidad (ajustable en Ajustes)
+  const adsActiveNow = () => !!(mouseAds || keys.KeyQ || touch.adsId !== null);
+  const sensMouse = () => 0.0022 * (adsActiveNow() ? (settings.sensAds ?? settings.sens ?? 1) : (settings.sens ?? 1));
+  const sensTouch = () => 0.0065 * (adsActiveNow() ? (settings.sensAds ?? settings.sens ?? 1) : (settings.sens ?? 1));
 
   // ----- Teclado -----
   window.addEventListener('keydown', (e) => {
