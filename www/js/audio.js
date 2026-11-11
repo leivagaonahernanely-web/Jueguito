@@ -111,6 +111,11 @@ export function playChest() {
   setTimeout(() => tone(1320, 0.16, { type: 'triangle', gain: 0.2 }), 200);
 }
 
+export function playSkill() {
+  tone(500, 0.12, { type: 'sawtooth', gain: 0.16, endFreq: 1100 });
+  setTimeout(() => tone(1300, 0.25, { type: 'triangle', gain: 0.18, endFreq: 1900 }), 110);
+}
+
 export function playGloo() {
   tone(320, 0.16, { type: 'sine', gain: 0.3, endFreq: 90 });
   setTimeout(() => tone(1500, 0.22, { type: 'triangle', gain: 0.14, endFreq: 900 }), 70);

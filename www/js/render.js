@@ -326,6 +326,9 @@ export function createView(canvas) {
   const glooWallMat = new THREE.MeshStandardMaterial({ color: 0x7fd0ff, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.82, emissive: 0x1a5f8a, emissiveIntensity: 0.45 });
   const glooBeamMat = new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.18, depthWrite: false });
   const glooSparkMat = new THREE.MeshBasicMaterial({ color: 0x9fe4ff });
+  const carMats = [0xd32f2f, 0x1976d2, 0xf9a825].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35, metalness: 0.5 }));
+  const carGlassMat = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, roughness: 0.1, metalness: 0.4, transparent: true, opacity: 0.7 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.9 });
   const playerRingMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
 
   // ----- Modelos de arma (origen en la empuñadura, cañón hacia +z) -----
@@ -1656,6 +1659,42 @@ export function createView(canvas) {
     }
   }
 
+  // Carros: chasis, cabina, ruedas que giran y luz de choque al moverse
+  const carMeshes = new Map();
+  function syncCars(dt, t) {
+    for (const car of G.cars || []) {
+      let m = carMeshes.get(car.id);
+      if (!m) {
+        m = new THREE.Group();
+        const bodyMat = carMats[carMeshes.size % carMats.length];
+        const body = new THREE.Mesh(new RoundedBoxGeometry(3.4, 0.85, 1.8, 2, 0.18), bodyMat);
+        body.position.y = 0.75;
+        body.castShadow = true;
+        const cabin = new THREE.Mesh(new RoundedBoxGeometry(1.8, 0.6, 1.6, 2, 0.14), carGlassMat);
+        cabin.position.set(-0.2, 1.4, 0);
+        const hood = new THREE.Mesh(new RoundedBoxGeometry(1.2, 0.35, 1.7, 2, 0.12), bodyMat);
+        hood.position.set(1.0, 1.15, 0);
+        m.add(body, cabin, hood);
+        m.userData.wheels = [];
+        for (const [wx, wz] of [[1.15, 0.82], [1.15, -0.82], [-1.15, 0.82], [-1.15, -0.82]]) {
+          const w = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.24, 12), wheelMat);
+          w.rotation.z = Math.PI / 2;
+          w.position.set(wx, 0.36, wz);
+          w.castShadow = true;
+          m.add(w);
+          m.userData.wheels.push(w);
+        }
+        m.position.set(car.x, 0, car.z);
+        carMeshes.set(car.id, m);
+        scene.add(m);
+      }
+      m.position.set(car.x, 0, car.z);
+      m.rotation.y = car.yaw;
+      const spin = (car.speed / 0.36) * dt;
+      for (const w of m.userData.wheels) w.rotation.y += spin;
+    }
+  }
+
   function syncBullets() {
     for (const b of G.bullets) {
       let m = tracers.get(b);
@@ -1849,6 +1888,7 @@ export function createView(canvas) {
     updateDamageNumbers(dt);
     syncChests();
     syncGloos();
+    syncCars(dt, t);
 
     if (G.player && worldGroup) {
       const p = G.player;

@@ -5,6 +5,7 @@ import {
   WEAPONS, WEAPON_WEIGHTS, GRENADE, ZONE_PHASES, ZONE_START_RADIUS,
   CHARACTERS, CHARACTER_IDS, SPRINT_MULT, STAMINA_MAX, STAMINA_DRAIN, STAMINA_REGEN,
   AIRDROP_FIRST, AIRDROP_EVERY,
+  SKILLS,
 } from './config.js';
 
 export const G = {
@@ -27,6 +28,8 @@ export const G = {
   airdrop: null,          // { x, z, ids, t } suministro activo en el mapa (marcador en el minimapa)
   airdropT: 0,            // segundos hasta el próximo suministro
   chests: [],             // arcas con mejor botín junto a las casas
+  cars: [],               // carros que se pueden conducir
+  radarT: 0,              // segundos restantes del radar del Explorador
 };
 
 const HOUSE_COLORS = ['#d7ccc8', '#bcaaa4', '#efebe9', '#ffe0b2', '#c5e1a5', '#b0bec5', '#f8bbd0', '#ffccbc'];
@@ -42,6 +45,9 @@ const GLIDE_SPEED = 9;    // desplazamiento horizontal en m/s
 const MAX_GLOO = 3;
 const LOOT_GLOO = 10;
 const GLOO = { hp: 220, dist: 2.2, w: 3.2, d: 0.5, h: 2.4 };
+
+// ---------- Carros ----------
+const CAR = { speed: 13, accel: 9, turn: 1.9, hp: 100 };
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -226,6 +232,7 @@ function makeEntity(p, name, isPlayer, colorIdx, charId = 'recluta') {
     reactT: 0, retreat: false,
     glide: false, dropX: p.x, dropZ: p.z,
     gloo: 0, slots: ['pistola', null], slot: 0, slotAmmo: [WEAPONS.pistola.mag, 0],
+    skillCd: 0, skillT: 0, inCar: null,
     lastKiller: null, lastWeapon: '',
     // IA de bots
     target: null, goal: null, thinkT: 0, grenadeT: 0,
@@ -435,6 +442,7 @@ function kill(e, src, label) {
   }
   if (e.armor > 0) G.loot.push({ id: G.nextId++, x: e.x, z: e.z, kind: 'armor', lock: 0 });
   if (e.gloo > 0) G.loot.push({ id: G.nextId++, x: e.x + rand(-0.8, 0.8), z: e.z + rand(-0.8, 0.8), kind: 'gloo', lock: 0 });
+  if (e.inCar) { e.inCar.driver = null; e.inCar.speed *= 0.5; e.inCar = null; }
   if (e.isPlayer && e.slots && e.slots[1] && e.slots[1] !== e.weapon) {
     G.loot.push({ id: G.nextId++, x: e.x + rand(-1, 1), z: e.z + rand(-1, 1), kind: 'weapon', weapon: e.slots[1], lock: 1.5 });
   }
@@ -666,6 +674,18 @@ function updatePlayer(dt, input) {
   p.pitch = clamp(p.pitch + input.dpitch, -0.9, 0.9);
   p.ads = !!input.ads;
 
+  // Al volante: el carro se maneja con el joystick, sin disparar ni curarse
+  if (p.inCar) {
+    const car = p.inCar;
+    p.throttle = input.forward;
+    p.steer = input.strafe;
+    p.yaw = car.yaw;
+    if (input.gloo) throwGloo(p); // desde el carro sí se puede tirar muro
+    return;
+  }
+  p.throttle = 0;
+  p.steer = 0;
+
   // Planeador: se dirige con el joystick hacia el punto de aterrizaje, sin disparar
   if (p.glide) {
     let fwd = input.forward, str = input.strafe;
@@ -697,7 +717,7 @@ function updatePlayer(dt, input) {
     p.stamina = Math.min(STAMINA_MAX, p.stamina + STAMINA_REGEN * dt);
   }
   p.sprinting = sprinting && p.stamina > 0;
-  const speed = PLAYER_SPEED * p.speedMult * (p.ads ? ADS_SPEED_MULT : 1) * (p.crouch ? 0.6 : 1) * (p.sprinting ? SPRINT_MULT : 1);
+  const speed = PLAYER_SPEED * p.speedMult * (p.ads ? ADS_SPEED_MULT : 1) * (p.crouch ? 0.6 : 1) * (p.sprinting ? SPRINT_MULT : 1) * (p.skillT > 0 && p.charId === 'recluta' ? 1.5 : 1);
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   const rx = -fz, rz = fx;
   moveEnt(p, (fx * fwd + rx * str) * speed * dt, (fz * fwd + rz * str) * speed * dt);
@@ -710,6 +730,7 @@ function updatePlayer(dt, input) {
   if (input.grenade) throwGrenade(p, aimDirPlayer(p));
   if (input.swap) swapWeapon(p);
   if (input.gloo) throwGloo(p);
+  if (input.skill) useSkill(p);
   tryPickup(p);
 }
 
@@ -855,6 +876,8 @@ export function startMatch(name = 'Tú', charId = 'recluta') {
   addLoot('grenade', LOOT_GRENADES);
   addLoot('armor', LOOT_ARMOR);
   addLoot('gloo', LOOT_GLOO);
+  spawnCars();
+  G.radarT = 0;
 
   // Arcas doradas junto a las casas: mejor botín para quien llegue primero
   G.chests = [];
@@ -1007,6 +1030,105 @@ export function throwGloo(e) {
   return true;
 }
 
+// Habilidad del personaje estilo Free Fire, con enfriamiento
+export function useSkill(e) {
+  if (!e.alive || e.glide || e.skillCd > 0) return false;
+  const sk = SKILLS[e.charId];
+  if (!sk) return false;
+  e.skillCd = sk.cd;
+  e.skillT = sk.dur;
+  if (e.charId === 'tanque') e.armor = Math.min(100, e.armor + 50);
+  if (e.charId === 'medico') e.hp = Math.min(e.maxHp, e.hp + 45);
+  if (e.charId === 'explorador') G.radarT = sk.dur;
+  G.events.push({ type: 'skill', charId: e.charId });
+  return true;
+}
+
+// Carros: uno por punto abierto del mapa; mientras están estacionados bloquean el paso
+function spawnCars() {
+  G.cars = [];
+  const colors = [0xd32f2f, 0x1976d2, 0xf9a825];
+  for (let i = 0; i < 3; i++) {
+    let cx = 0, cz = 0, ok = false;
+    for (let tries = 0; tries < 40 && !ok; tries++) {
+      cx = rand(25, WORLD - 25);
+      cz = rand(25, WORLD - 25);
+      ok = !blockedAt(cx, 1, cz) && !blockedAt(cx - 2, 1, cz) && !blockedAt(cx + 2, 1, cz)
+        && !blockedAt(cx, 1, cz - 1.5) && !blockedAt(cx, 1, cz + 1.5);
+    }
+    if (!ok) continue;
+    const car = { id: G.nextId++, x: cx, z: cz, yaw: Math.random() * Math.PI * 2, speed: 0, driver: null };
+    car.obs = { shape: 'rect', kind: 'car', x: cx - 1.7, z: cz - 1, w: 3.4, d: 2, h: 1.5, color: colors[i % 3] };
+    G.obstacles.push(car.obs);
+    addObstacleToGrid(car.obs);
+    G.cars.push(car);
+  }
+}
+
+// Subir o bajar del carro más cercano
+export function enterExitCar(e) {
+  if (!e.alive || e.glide) return;
+  if (e.inCar) {
+    const car = e.inCar;
+    car.speed *= 0.3;
+    car.driver = null;
+    e.inCar = null;
+    car.obs.x = car.x - 1.7;
+    car.obs.z = car.z - 1;
+    car.obs.gone = false;
+    e.x = car.x - Math.sin(car.yaw) * 2;
+    e.z = car.z - Math.cos(car.yaw) * 2;
+    G.events.push({ type: 'swap' });
+    return;
+  }
+  let best = null, bestD = 3.4;
+  for (const car of G.cars) {
+    if (car.driver) continue;
+    const d = Math.hypot(e.x - car.x, e.z - car.z);
+    if (d < bestD) { bestD = d; best = car; }
+  }
+  if (!best) return;
+  e.inCar = best;
+  best.driver = e;
+  best.obs.gone = true;
+  G.events.push({ type: 'swap' });
+}
+
+// Conducción: acelera y gira con el joystick; atropella a quien se cruce
+function updateCars(dt) {
+  for (const car of G.cars) {
+    const drv = car.driver;
+    if (drv && drv.alive && drv.inCar === car) {
+      car.speed = clamp(car.speed + drv.throttle * CAR.accel * dt, -4, CAR.speed);
+      if (Math.abs(car.speed) > 0.2) car.yaw += drv.steer * CAR.turn * dt * (car.speed >= 0 ? 1 : -1);
+      const nx = car.x + Math.sin(car.yaw) * car.speed * dt;
+      const nz = car.z + Math.cos(car.yaw) * car.speed * dt;
+      if (blockedAt(nx + Math.sin(car.yaw) * 1.7, 1, nz + Math.cos(car.yaw) * 1.7)) {
+        car.speed = 0;
+      } else {
+        car.x = clamp(nx, 2, WORLD - 2);
+        car.z = clamp(nz, 2, WORLD - 2);
+      }
+      drv.x = car.x;
+      drv.z = car.z;
+      drv.moving = Math.abs(car.speed) > 0.6;
+      // Atropello: el caos es parte del estilo
+      if (Math.abs(car.speed) > 6) {
+        for (const e of G.entities) {
+          if (!e.alive || e === drv) continue;
+          if (Math.hypot(e.x - car.x, e.z - car.z) < 1.9) {
+            damage(e, 55, drv, 'Atropello');
+            car.speed *= 0.85;
+          }
+        }
+      }
+    } else {
+      car.driver = null;
+      car.speed *= Math.max(0, 1 - dt * 2.5);
+    }
+  }
+}
+
 // Cambiar de arma entre las dos ranuras (tecla X o el botón táctil)
 export function swapWeapon(e) {
   if (!e.alive || !e.slots || !e.slots[1] || e.glide) return;
@@ -1032,6 +1154,8 @@ export function update(dt, input) {
       e.y -= GLIDE_FALL * dt;
       if (e.y <= 0) { e.y = 0; e.vy = 0; e.glide = false; }
     }
+    if (e.skillCd > 0) e.skillCd -= dt;
+    if (e.skillT > 0) e.skillT -= dt;
     if (e.cool > 0) e.cool -= dt;
     if (e.flash > 0) e.flash -= dt;
     if (e.healT > 0) e.healT -= dt;
@@ -1057,6 +1181,8 @@ export function update(dt, input) {
   for (const b of G.bots) if (b.alive) updateBot(b, dt);
   updateAirdrops(dt);
   updateChests(dt);
+  updateCars(dt);
+  if (G.radarT > 0) G.radarT -= dt;
   updateBullets(dt);
   updateGrenades(dt);
 

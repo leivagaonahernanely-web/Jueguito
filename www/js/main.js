@@ -3,7 +3,8 @@ import { G, genMap, startMatch, update, zoneText } from './logic.js';
 import { createView } from './render.js';
 import { createInput } from './input.js';
 import * as SFX from './audio.js';
-import { WORLD, WEAPONS, MAX_MEDS, MAX_GRENADES, ZONE_PHASES, CHARACTERS, CHARACTER_IDS } from './config.js';
+import { WORLD, WEAPONS, MAX_MEDS, MAX_GRENADES, ZONE_PHASES, CHARACTERS, CHARACTER_IDS, SKILLS } from './config.js';
+import { enterExitCar } from './logic.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -18,6 +19,7 @@ const els = {
   fire: $('btnFire'), ads: $('btnAds'), reload: $('btnReload'), heal: $('btnHeal'), grenade: $('btnGrenade'),
   sprint: $('btnSprint'), stamfill: $('stamfill'), crouch: $('btnCrouch'), jump: $('btnJump'),
   swap: $('btnSwap'), glooBtn: $('btnGloo'), slot2: $('slot2'), gloo: $('glooCount'),
+  skill: $('btnSkill'), skillCd: $('skillCd'), car: $('btnCar'), carLbl: $('carLbl'),
   lobby: $('lobby'), lobbyCount: $('lobbyCount'), lobbyStatus: $('lobbyStatus'), charGrid: $('charGrid'),
   charInfo: $('charInfo'), lobbyPlayers: $('lobbyPlayers'), lobbyStart: $('lobbyStart'), lobbyBack: $('lobbyBack'),
   countdown: $('countdown'), countText: $('countText'),
@@ -254,7 +256,9 @@ function renderCharCards() {
 
 function showCharInfo() {
   const ch = CHARACTERS[settings.char];
-  els.charInfo.textContent = `${ch.name}: ${ch.desc} (vida ${ch.hp})`;
+  const cid = CHARACTER_IDS.find((k) => CHARACTERS[k] === ch) || 'recluta';
+  const sk = SKILLS[cid];
+  els.charInfo.textContent = `${ch.name}: ${ch.desc} (vida ${ch.hp}) · Habilidad ${sk ? sk.name : ''}: ${sk ? sk.desc : ''}`;
 }
 
 function renderLobbyPlayers() {
@@ -403,6 +407,9 @@ function handleEvents() {
       case 'swap':
         SFX.playPickup();
         break;
+      case 'skill':
+        SFX.playSkill();
+        break;
       case 'reload':
         if (ev.id === p.id) SFX.playReload();
         break;
@@ -420,6 +427,7 @@ function handleEvents() {
 
 // ----- Interfaz -----
 const weaponName = (k) => WEAPONS[k]?.name ?? k;
+els.car?.addEventListener('click', () => { if (G.player && G.state === 'playing') enterExitCar(G.player); });
 
 // Banner al eliminar a alguien, con racha si eliminas varios seguidos
 function showKillBanner(victimId) {
@@ -460,6 +468,34 @@ function updateHUD(dt) {
   } else {
     els.ammo.textContent = `${p.ammo}/${w.mag}`;
     els.reloadfill.style.width = '0%';
+  }
+  // Carro: aparece el botón cuando hay uno cerca (o si vas volando dentro de uno)
+  if (els.car) {
+    if (p.inCar) {
+      els.car.classList.add('show');
+      els.carLbl.textContent = 'Bajar';
+    } else {
+      let near = false;
+      for (const car of G.cars || []) {
+        if (!car.driver && Math.hypot(p.x - car.x, p.z - car.z) < 3.4) { near = true; break; }
+      }
+      els.car.classList.toggle('show', near);
+      if (near) els.carLbl.textContent = 'Subir';
+    }
+  }
+  // Habilidad: cuenta atrás y aviso de lista
+  if (els.skill && els.skillCd) {
+    const sk = SKILLS[p.charId];
+    if (p.skillCd > 0) {
+      els.skillCd.textContent = String(Math.ceil(p.skillCd));
+      els.skill.classList.add('cd');
+      els.skill.classList.remove('ready');
+    } else {
+      els.skillCd.textContent = '';
+      els.skill.classList.remove('cd');
+      els.skill.classList.add('ready');
+    }
+    if (sk) els.skill.title = `${sk.name}: ${sk.desc}`;
   }
   els.grenades.textContent = `${p.grenades}/${MAX_GRENADES}`;
   els.meds.textContent = `${p.meds}/${p.medMax || MAX_MEDS}`;

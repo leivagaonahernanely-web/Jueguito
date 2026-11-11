@@ -755,3 +755,36 @@ body::after {
   background: radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.28), rgba(16, 22, 36, 0.85) 75%);
 }
 #joyKnob { box-shadow: 0 0 14px rgba(53, 214, 255, 0.55); }
+
+/* ===== Botones unificados estilo Free Fire: un solo color para todos ===== */
+.btn.heal-btn, .btn.grenade-btn, .btn.sprint-btn, .btn.gloo-btn, .btn.swap-btn, .btn.reload-btn, .btn.jump-btn, .btn.crouch-btn, .btn.ads-btn {
+  background: radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.3), rgba(16, 22, 36, 0.82) 75%) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 14px rgba(53, 214, 255, 0.15), inset 0 2px 0 rgba(255, 255, 255, 0.3) !important;
+  color: #fff;
+}
+.btn.fire-btn {
+  background: radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.32), rgba(16, 22, 36, 0.82) 75%) !important;
+  border-color: rgba(255, 255, 255, 0.65) !important;
+  color: #fff;
+}
+.btn.fire-btn, .btn.heal-btn, .btn.grenade-btn, .btn.sprint-btn, .btn.gloo-btn, .btn.swap-btn, .btn.reload-btn, .btn.jump-btn, .btn.crouch-btn, .btn.ads-btn { color: #fff; }
+#btnSprint .lbl, #btnSprint .ico, #btnSprint .ico svg { color: #fff !important; }
+.btn.skill-btn {
+  right: 96px; bottom: calc(env(safe-area-inset-bottom, 0px) + 280px);
+  width: 58px; height: 58px; border-radius: 50%;
+}
+.btn.skill-btn .ico svg { color: #ffd23f; }
+.btn.skill-btn .lbl { font-size: 8px; }
+.btn.skill-btn #skillCd {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 900; color: #fff; background: rgba(10, 14, 24, 0.72); border-radius: 50%;
+}
+.btn.skill-btn.ready { border-color: rgba(255, 210, 63, 0.8) !important; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 210, 63, 0.45) !important; }
+.btn.skill-btn.cd { filter: grayscale(0.7) brightness(0.8); }
+.btn.car-btn {
+  left: 24px; bottom: calc(env(safe-area-inset-bottom, 0px) + 210px);
+  width: 62px; height: 62px; border-radius: 50%;
+  display: none !important;
+}
+.btn.car-btn.show { display: flex !important; }

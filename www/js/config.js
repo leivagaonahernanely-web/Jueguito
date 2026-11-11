@@ -82,6 +82,14 @@ export const CHARACTERS = {
 };
 export const CHARACTER_IDS = Object.keys(CHARACTERS);
 
+// Habilidad activa de cada personaje (botón con enfriamiento, como en Free Fire)
+export const SKILLS = {
+  recluta: { name: 'Ráfaga', desc: 'Corre 50% más rápido durante 5 s', cd: 25, dur: 5 },
+  tanque: { name: 'Escudo', desc: 'Gana 50 de blindaje al instante', cd: 30, dur: 0 },
+  explorador: { name: 'Radar', desc: 'Revela a los enemigos en el minimapa 6 s', cd: 30, dur: 6 },
+  medico: { name: 'Botiquín XL', desc: 'Cura 45 de vida al instante', cd: 25, dur: 0 },
+};
+
 // ----- Sprint y resistencia -----
 export const SPRINT_MULT = 1.45;
 export const STAMINA_MAX = 100;
