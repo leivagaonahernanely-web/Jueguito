@@ -11,9 +11,11 @@ const SHIRT_FOR_PLAYER = 0x1e88e5;
 const TAU = Math.PI * 2;
 const lerp = (a, b, t) => a + (b - a) * t;
 
+const IS_TOUCH = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+
 export function createView(canvas) {
   // ----- Renderer -----
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !IS_TOUCH, powerPreference: 'high-performance' });
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -32,9 +34,11 @@ export function createView(canvas) {
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff0cc, 2.8);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  const shadowRes = IS_TOUCH ? 1024 : 2048;
+  sun.shadow.mapSize.set(shadowRes, shadowRes);
   const sc = sun.shadow.camera;
-  sc.left = -85; sc.right = 85; sc.top = 85; sc.bottom = -85; sc.near = 1; sc.far = 320;
+  sc.left = -50; sc.right = 50; sc.top = 50; sc.bottom = -50; sc.near = 1; sc.far = 240;
+  sc.updateProjectionMatrix();
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.03;
   sun.shadow.radius = 3;
@@ -106,6 +110,26 @@ export function createView(canvas) {
     cloudSprites.push(sp);
   }
 
+  // Textura alfa de briznas para el pasto
+  const grassBladeTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext('2d');
+    g.lineCap = 'round';
+    for (let i = 0; i < 8; i++) {
+      const x0 = 6 + i * 7 + Math.random() * 4;
+      const bend = (Math.random() - 0.5) * 20;
+      g.strokeStyle = 'rgba(255,255,255,1)';
+      g.lineWidth = 3 + Math.random() * 2;
+      g.beginPath();
+      g.moveTo(x0, 64);
+      g.quadraticCurveTo(x0 + bend * 0.3, 34, x0 + bend, 4 + Math.random() * 12);
+      g.stroke();
+    }
+    return new THREE.CanvasTexture(c);
+  })();
+
   // ----- Geometrías compartidas -----
   // Copa de árbol: esfera con ruido en los vértices para que no parezca un cristal
   function makeCanopyGeometry(radius, seed) {
@@ -165,6 +189,12 @@ export function createView(canvas) {
     framePost: box(0.16, 2.2, 0.18),
     frameLintel: box(1.4, 0.2, 0.2),
     doorstep: box(1.35, 0.14, 0.6),
+    grassBlade: new THREE.PlaneGeometry(0.34, 0.3).translate(0, 0.15, 0),
+    dirtPatch: new THREE.CircleGeometry(1, 12),
+    barrel: new THREE.CylinderGeometry(0.34, 0.34, 0.9, 10),
+    sandbag: new RoundedBoxGeometry(0.62, 0.28, 0.34, 2, 0.1),
+    fencePost: box(0.14, 1.1, 0.14),
+    fenceRail: box(2.5, 0.09, 0.06),
     lampPole: new THREE.CylinderGeometry(0.06, 0.08, 4.2, 6),
     lampHead: new THREE.SphereGeometry(0.22, 10, 8),
     tracer: box(0.035, 0.035, 1),
@@ -282,6 +312,11 @@ export function createView(canvas) {
   const zoneMat = new THREE.MeshBasicMaterial({ color: 0x3b8bff, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false });
   const zoneLineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
   const roofMats = [0x8c3b2e, 0x51606e, 0x4a5d48, 0x6e4b2a, 0x3b4050].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
+  const grassMat = new THREE.MeshStandardMaterial({ color: 0x5a9a3c, alphaMap: grassBladeTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 1 });
+  const dirtPatchMat = new THREE.MeshStandardMaterial({ color: 0x8a7449, roughness: 1 });
+  const barrelMats = [0x2f5f8f, 0x8f3a2f, 0x4a6b3a].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.3 }));
+  const sandbagMat = new THREE.MeshStandardMaterial({ color: 0x9a8a5e, roughness: 1 });
+  const fenceMat = new THREE.MeshStandardMaterial({ color: 0x7a5a38, roughness: 1 });
   const playerRingMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
 
   // ----- Modelos de arma (origen en la empuñadura, cañón hacia +z) -----
@@ -410,6 +445,21 @@ export function createView(canvas) {
     sand.position.set(WORLD / 2, -0.05, WORLD / 2);
     sand.receiveShadow = true;
     worldGroup.add(sand);
+
+    // Colinas lejanas alrededor del mapa: el horizonte deja de ser un plano vacío
+    const hillGeo = new THREE.SphereGeometry(1, 12, 8, 0, TAU, 0, Math.PI / 2);
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * TAU + Math.random() * 0.35;
+      const d = 330 + Math.random() * 110;
+      const r = 45 + Math.random() * 55;
+      const hill = new THREE.Mesh(hillGeo, new THREE.MeshStandardMaterial({
+        color: new THREE.Color().setHSL(0.28 + Math.random() * 0.06, 0.3, 0.22 + Math.random() * 0.09),
+        roughness: 1,
+      }));
+      hill.position.set(WORLD / 2 + Math.cos(a) * d, -2, WORLD / 2 + Math.sin(a) * d);
+      hill.scale.set(r, r * (0.18 + Math.random() * 0.14), r);
+      worldGroup.add(hill);
+    }
 
     // Caminos de tierra cruzando el mapa
     const pathMat = new THREE.MeshStandardMaterial({ color: 0xa88b5e, roughness: 1 });
@@ -694,6 +744,151 @@ export function createView(canvas) {
       im.castShadow = true;
       worldGroup.add(im);
     }
+
+    // ----- Decorado adicional -----
+    // Pasto: matas instanciadas, muy baratas (sin sombras)
+    const tufts = [];
+    for (let tries = 0; tries < 1400 && tufts.length < 650; tries++) {
+      const x = 2 + Math.random() * (WORLD - 4), z = 2 + Math.random() * (WORLD - 4);
+      if (blockedAt(x, 0.5, z)) continue;
+      if (Math.abs(x - WORLD / 2) < 6.5 || Math.abs(z - WORLD / 2) < 6.5) continue; // no en los caminos
+      tufts.push({ x, z });
+    }
+    if (tufts.length) {
+      const im = new THREE.InstancedMesh(geo.grassBlade, grassMat, tufts.length);
+      tufts.forEach((p, i) => {
+        dummy.position.set(p.x, 0, p.z);
+        dummy.rotation.set((Math.random() - 0.5) * 0.2, Math.random() * TAU, (Math.random() - 0.5) * 0.2);
+        const sc = 0.8 + Math.random() * 0.6;
+        dummy.scale.set(sc, sc, sc);
+        dummy.updateMatrix();
+        im.setMatrixAt(i, dummy.matrix);
+        im.setColorAt(i, new THREE.Color().setHSL(0.26 + Math.random() * 0.08, 0.5, 0.3 + Math.random() * 0.14));
+      });
+      worldGroup.add(im);
+    }
+
+    // Parches de tierra desgastada
+    const patches = [];
+    for (let tries = 0; tries < 300 && patches.length < 40; tries++) {
+      const x = 3 + Math.random() * (WORLD - 6), z = 3 + Math.random() * (WORLD - 6);
+      if (blockedAt(x, 0.5, z)) continue;
+      patches.push({ x, z, r: 1.2 + Math.random() * 2.6 });
+    }
+    if (patches.length) {
+      const im = new THREE.InstancedMesh(geo.dirtPatch, dirtPatchMat, patches.length);
+      patches.forEach((p, i) => {
+        dummy.position.set(p.x, 0.03, p.z);
+        dummy.rotation.set(-Math.PI / 2, 0, Math.random() * TAU);
+        dummy.scale.set(p.r, p.r * (0.6 + Math.random() * 0.5), 1);
+        dummy.updateMatrix();
+        im.setMatrixAt(i, dummy.matrix);
+      });
+      im.receiveShadow = true;
+      worldGroup.add(im);
+    }
+
+    // Barriles y sacos de arena junto a las casas
+    const barrels = [];
+    const bagSpots = [];
+    for (const o of houses) {
+      if (Math.random() < 0.75) {
+        for (let tries = 0; tries < 6 && barrels.length < 40; tries++) {
+          const side = Math.floor(Math.random() * 4);
+          const px = side === 0 ? o.x - 1.1 : side === 1 ? o.x + o.w + 1.1 : o.x + Math.random() * o.w;
+          const pz = side === 2 ? o.z - 1.1 : side === 3 ? o.z + o.d + 1.1 : o.z + Math.random() * o.d;
+          if (blockedAt(px, 0.5, pz)) continue;
+          barrels.push({ x: px, z: pz });
+        }
+      }
+      if (Math.random() < 0.55) {
+        for (let tries = 0; tries < 6 && bagSpots.length < 24; tries++) {
+          const side = Math.floor(Math.random() * 4);
+          const px = side === 0 ? o.x - 1.5 : side === 1 ? o.x + o.w + 1.5 : o.x + Math.random() * o.w;
+          const pz = side === 2 ? o.z - 1.5 : side === 3 ? o.z + o.d + 1.5 : o.z + Math.random() * o.d;
+          if (blockedAt(px, 0.5, pz)) continue;
+          bagSpots.push({ x: px, z: pz, ry: side < 2 ? Math.PI / 2 : 0 });
+        }
+      }
+    }
+    barrels.forEach((b, i) => {
+      const m = new THREE.Mesh(geo.barrel, barrelMats[i % barrelMats.length]);
+      m.position.set(b.x, 0.45, b.z);
+      m.rotation.y = Math.random() * TAU;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      worldGroup.add(m);
+    });
+    if (bagSpots.length) {
+      const bags = [];
+      bagSpots.forEach((b) => {
+        for (let k = -1; k <= 1; k++) {
+          bags.push({
+            x: b.ry === 0 ? b.x + k * 0.6 : b.x,
+            z: b.ry === 0 ? b.z : b.z + k * 0.6,
+            y: 0.14 + (k !== 0 && Math.random() < 0.4 ? 0.26 : 0),
+            ry: b.ry + (Math.random() - 0.5) * 0.12,
+          });
+        }
+      });
+      const im = new THREE.InstancedMesh(geo.sandbag, sandbagMat, bags.length);
+      bags.forEach((b, i) => {
+        dummy.position.set(b.x, b.y, b.z);
+        dummy.rotation.set(0, b.ry, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        im.setMatrixAt(i, dummy.matrix);
+      });
+      im.castShadow = true;
+      im.receiveShadow = true;
+      worldGroup.add(im);
+    }
+
+    // Cercas de madera a lo largo de los caminos (con tramos rotos)
+    const fencePosts = [];
+    const fenceRails = [];
+    const half = WORLD / 2;
+    for (const road of ['v', 'h']) {
+      for (const off of [-7.4, 7.4]) {
+        let prev = null;
+        for (let t = 6; t < WORLD - 6; t += 2.6) {
+          const bx = road === 'v' ? half + off : t;
+          const bz = road === 'v' ? t : half + off;
+          if (blockedAt(bx, 0.5, bz) || Math.random() < 0.3) { prev = null; continue; }
+          fencePosts.push({ x: bx, z: bz });
+          if (prev) {
+            const rail = {
+              x: (prev.x + bx) / 2, z: (prev.z + bz) / 2,
+              ry: road === 'v' ? Math.PI / 2 : 0,
+            };
+            fenceRails.push({ ...rail, y: 0.45 }, { ...rail, y: 0.85 });
+          }
+          prev = { x: bx, z: bz };
+        }
+      }
+    }
+    if (fencePosts.length) {
+      const im = new THREE.InstancedMesh(geo.fencePost, fenceMat, fencePosts.length);
+      fencePosts.forEach((p, i) => {
+        dummy.position.set(p.x, 0.55, p.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 0.9 + Math.random() * 0.3, 1);
+        dummy.updateMatrix();
+        im.setMatrixAt(i, dummy.matrix);
+      });
+      worldGroup.add(im);
+    }
+    if (fenceRails.length) {
+      const im = new THREE.InstancedMesh(geo.fenceRail, fenceMat, fenceRails.length);
+      fenceRails.forEach((r, i) => {
+        dummy.position.set(r.x, r.y, r.z);
+        dummy.rotation.set(0, r.ry, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        im.setMatrixAt(i, dummy.matrix);
+      });
+      worldGroup.add(im);
+    }
   }
 
   // ----- Personajes -----
@@ -702,6 +897,8 @@ export function createView(canvas) {
   let avatarScale = 1;       // escala para que mida 1.8 m
   let avatarMinY = 0;        // altura de los pies del modelo original
   const tmpV = new THREE.Vector3();
+  const tmpV2 = new THREE.Vector3();
+  const tmpV3 = new THREE.Vector3();
 
   function loadAvatar() {
     new GLTFLoader().loadAsync('assets/avatar.glb').then((av) => {
@@ -1056,8 +1253,9 @@ export function createView(canvas) {
     const high = q === 'alta';
     renderer.shadowMap.enabled = high;
     sun.castShadow = high;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, high ? 2 : 1));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, high ? (IS_TOUCH ? 1.5 : 2) : 1));
     if (bloomPass) bloomPass.enabled = high;
+    if (composer) usePost = high;   // en baja se dibuja directo, sin pases extra
     resize();
   }
 
@@ -1250,7 +1448,7 @@ export function createView(canvas) {
         ch.shotsSeen = e.shots;
         ch.kick = 1;
         const dir = { x: Math.sin(e.yaw), z: Math.cos(e.yaw) };
-        const gp = ch.gunPivot.getWorldPosition(new THREE.Vector3());
+        const gp = ch.gunPivot.getWorldPosition(tmpV2);
         if (w.pellets === 1 && e.isPlayer) spawnShell(gp.x, gp.y, gp.z, dir);
         if (!e.isPlayer && Math.random() < 0.5) spawnShell(gp.x, gp.y, gp.z, dir);
       }
@@ -1482,14 +1680,14 @@ export function createView(canvas) {
       const dist = cameraDistance(p, fx, fz, ads ? 2.6 : 4.4, ads ? 0.45 : 0.85);
       const side = ads ? 0.45 : 0.85;
 
-      const desired = new THREE.Vector3(
+      const desired = tmpV2.set(
         p.x - fx * dist + rx * side,
         2.35 + sp * 1.2 + (p.moving ? Math.sin(p.walk * 2) * 0.03 : 0),
         p.z - fz * dist + rz * side,
       );
       camPos.lerp(desired, 1 - Math.exp(-dt * 18));
       // La mira apunta a donde irán las balas
-      const aim = new THREE.Vector3(fx * cp, sp, fz * cp);
+      const aim = tmpV3.set(fx * cp, sp, fz * cp);
       camLook.copy(camPos).addScaledVector(aim, 40);
 
       fovNow = lerp(fovNow, ads ? 46 : 62, 1 - Math.exp(-dt * 12));

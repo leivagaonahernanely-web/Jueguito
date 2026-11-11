@@ -40,12 +40,19 @@ window.addEventListener('error', (e) => showFatal(e.message || String(e.error)))
 window.addEventListener('unhandledrejection', (e) => showFatal(String(e.reason?.message || e.reason)));
 
 // ----- Ajustes persistentes -----
-const DEFAULTS = { sens: 1, vol: 0.6, quality: 'alta', name: '', char: 'recluta' };
+const isTouchSettings = window.matchMedia('(pointer: coarse)').matches;
+const DEFAULTS = { sens: 1, vol: 0.6, quality: isTouchSettings ? 'baja' : 'alta', name: '', char: 'recluta' };
 if (!CHARACTERS[DEFAULTS.char]) DEFAULTS.char = 'recluta';
 let settings = { ...DEFAULTS };
 try {
   settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('br3d') || '{}') };
 } catch (_) { /* ajustes por defecto */ }
+// Una sola vez: en celular arranca en calidad baja para que no se arrastre.
+// Después el usuario puede cambiarla en Ajustes y esa elección se respeta.
+if (!localStorage.getItem('br3d_autoq')) {
+  settings.quality = DEFAULTS.quality;
+  try { localStorage.setItem('br3d_autoq', '1'); } catch (_) { /* sin almacenamiento */ }
+}
 if (!CHARACTERS[settings.char]) settings.char = 'recluta';
 function saveSettings() {
   try { localStorage.setItem('br3d', JSON.stringify(settings)); } catch (_) { /* sin almacenamiento */ }
