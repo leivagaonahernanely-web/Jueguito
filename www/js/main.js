@@ -20,6 +20,7 @@ const els = {
   sprint: $('btnSprint'), stamfill: $('stamfill'), crouch: $('btnCrouch'), jump: $('btnJump'),
   swap: $('btnSwap'), glooBtn: $('btnGloo'), slot2: $('slot2'), gloo: $('glooCount'),
   skill: $('btnSkill'), skillCd: $('skillCd'), car: $('btnCar'), carLbl: $('carLbl'),
+  skillInfo: $('skillInfo'),
   lobby: $('lobby'), lobbyCount: $('lobbyCount'), lobbyStatus: $('lobbyStatus'), charGrid: $('charGrid'),
   charInfo: $('charInfo'), lobbyPlayers: $('lobbyPlayers'), lobbyStart: $('lobbyStart'), lobbyBack: $('lobbyBack'),
   countdown: $('countdown'), countText: $('countText'),
@@ -279,7 +280,15 @@ function showCharInfo() {
   const ch = CHARACTERS[settings.char];
   const cid = CHARACTER_IDS.find((k) => CHARACTERS[k] === ch) || 'recluta';
   const sk = SKILLS[cid];
-  els.charInfo.textContent = `${ch.name}: ${ch.desc} (vida ${ch.hp}) · Habilidad ${sk ? sk.name : ''}: ${sk ? sk.desc : ''}`;
+  els.charInfo.textContent = `${ch.name}: ${ch.desc} (vida ${ch.hp})`;
+  if (els.skillInfo) {
+    if (sk) {
+      els.skillInfo.classList.remove('hidden');
+      els.skillInfo.innerHTML = `<span class="sk-name">⚡ ${sk.name}</span><span class="sk-desc">${sk.desc}</span><span class="sk-cd">Enfriamiento: ${sk.cd}s</span>`;
+    } else {
+      els.skillInfo.classList.add('hidden');
+    }
+  }
 }
 
 function renderLobbyPlayers() {

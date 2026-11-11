@@ -97,5 +97,5 @@ export const STAMINA_DRAIN = 26;      // por segundo corriendo
 export const STAMINA_REGEN = 17;      // por segundo sin correr
 
 // ----- Suministros aéreos (cofres que aparecen en el mapa durante la partida) -----
-export const AIRDROP_FIRST = 75;      // segundos hasta el primer suministro
-export const AIRDROP_EVERY = 55;      // segundos entre suministros
+export const AIRDROP_FIRST = 50;      // segundos hasta el primer suministro
+export const AIRDROP_EVERY = 35;      // segundos entre suministros
