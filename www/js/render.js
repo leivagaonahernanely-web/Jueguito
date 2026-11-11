@@ -1029,11 +1029,14 @@ export function createView(canvas) {
       o.receiveShadow = true;
       o.material = o.material.clone();
       const n = o.material.name;
-      if (n === 'Wolf3D_Outfit_Top') o.material.color.copy(topColor);
-      else if (n === 'Wolf3D_Outfit_Bottom') o.material.color.copy(pantsColor);
-      else if (n === 'Wolf3D_Outfit_Footwear') o.material.color.copy(bootsColor);
-      else if (n === 'Wolf3D_Headwear' && look.helmet != null) o.material.color.set(look.helmet);
+      if (n === 'Wolf3D_Outfit_Top') { o.material.color.copy(topColor); o.material.roughness = 0.8; }
+      else if (n === 'Wolf3D_Outfit_Bottom') { o.material.color.copy(pantsColor); o.material.roughness = 0.85; }
+      else if (n === 'Wolf3D_Outfit_Footwear') { o.material.color.copy(bootsColor); o.material.roughness = 0.9; }
+      else if (n === 'Wolf3D_Headwear' && look.helmet != null) { o.material.color.set(look.helmet); o.material.roughness = 0.38; o.material.metalness = 0.2; }
       else if (n === 'Wolf3D_Headwear' && look.hair != null) o.material.color.set(look.hair);
+      else if (n === 'Wolf3D_Skin') { o.material.roughness = 0.55; }
+      else if (n === 'Wolf3D_Body') { o.material.roughness = 0.75; }
+      else if (n === 'Wolf3D_Beard') { o.material.roughness = 0.92; }
     });
 
     // Huesos que movemos a mano, guardando su postura de reposo para componer las rotaciones
@@ -1059,6 +1062,27 @@ export function createView(canvas) {
       ring.rotation.x = -Math.PI / 2;
       ring.position.y = 0.03;
       root.add(ring);
+    }
+
+    // Detalle universal: bolsillos del pecho y rodilleras sobre el avatar
+    const spineDet = model.getObjectByName('Spine2');
+    if (spineDet) {
+      const pouchMat = new THREE.MeshStandardMaterial({ color: 0x2c313a, roughness: 0.85 });
+      for (const sx of [-0.11, 0.11]) {
+        const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.045), pouchMat);
+        pouch.position.set(sx, 0.02, 0.13);
+        pouch.castShadow = true;
+        spineDet.add(pouch);
+      }
+    }
+    const gearMat = new THREE.MeshStandardMaterial({ color: 0x23272e, roughness: 0.8 });
+    for (const legName of ['LeftLeg', 'RightLeg']) {
+      const leg = model.getObjectByName(legName);
+      if (!leg) continue;
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.05), gearMat);
+      pad.position.set(0, 0.05, 0.05);
+      pad.castShadow = true;
+      leg.add(pad);
     }
 
     // Accesorios por personaje (piezas simples, sin dibujar texturas)
@@ -1503,6 +1527,8 @@ export function createView(canvas) {
 
   // ----- Sincronización de entidades -----
   function syncCharacters(dt) {
+    // Solo los personajes cercanos proyectan sombra: ahorra mucho en móvil
+    const camPos = camera.position;
     for (const e of G.entities) {
       let ch = chars.get(e.id);
       if (!ch) {
@@ -1510,11 +1536,23 @@ export function createView(canvas) {
         chars.set(e.id, ch);
         scene.add(ch.root);
         ch.shotsSeen = e.shots;
+        ch.shadowMeshes = [];
+        ch.root.traverse((o) => { if (o.isMesh) ch.shadowMeshes.push(o); });
+        ch.shadowsNear = true;
       }
       const w = WEAPONS[e.weapon];
       setWeaponModel(ch, e.weapon);
       ch.root.position.set(e.x, e.y || 0, e.z);
       ch.root.rotation.y = e.yaw;
+      // Sombras solo de cerca: gran ahorro en móvil
+      {
+        const dx = e.x - camPos.x, dz = e.z - camPos.z;
+        const near = dx * dx + dz * dz < 2025;
+        if (near !== ch.shadowsNear) {
+          ch.shadowsNear = near;
+          for (const m of ch.shadowMeshes) m.castShadow = near;
+        }
+      }
       if (ch.wing) ch.wing.visible = !!(e.glide && e.alive);
       // Agachado: el cuerpo se encoge desde los pies
       ch.body.scale.y += ((e.crouch ? 0.7 : 1) - ch.body.scale.y) * Math.min(1, dt * 12);
