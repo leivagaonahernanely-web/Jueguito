@@ -113,10 +113,18 @@ export function createInput(canvas, els, settings) {
   holdBtn(els.ads, (id) => { touch.adsId = id; }, null);
   holdBtn(els.sprint, (id) => { touch.sprintId = id; }, null);
   holdBtn(els.crouch, (id) => { touch.crouchId = id; }, null);
-  if (els.jump) els.jump.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.jump = true; });
-  if (els.reload) els.reload.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.reload = true; });
-  if (els.heal) els.heal.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.heal = true; });
-  if (els.grenade) els.grenade.addEventListener('pointerdown', (e) => { e.preventDefault(); acc.grenade = true; });
+  const tapBtn = (el, fn) => {
+    if (!el) return;
+    el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.classList.add('active'); fn(); });
+    const off = () => el.classList.remove('active');
+    el.addEventListener('pointerup', off);
+    el.addEventListener('pointerleave', off);
+    el.addEventListener('pointercancel', off);
+  };
+  tapBtn(els.jump, () => { acc.jump = true; });
+  tapBtn(els.reload, () => { acc.reload = true; });
+  tapBtn(els.heal, () => { acc.heal = true; });
+  tapBtn(els.grenade, () => { acc.grenade = true; });
 
   function drawJoystick() {
     const j = els.joy;

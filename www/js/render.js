@@ -919,6 +919,7 @@ export function createView(canvas) {
   const _poseQ = new THREE.Quaternion();
   const _zAxis = new THREE.Vector3(0, 0, 1);
   const _xAxis = new THREE.Vector3(1, 0, 0);
+  const _yAxis = new THREE.Vector3(0, 1, 0);
   function setBone(ch, name, ang, axis = _xAxis) {
     const bn = ch.bones[name];
     if (!bn) return;
@@ -932,41 +933,72 @@ export function createView(canvas) {
   // muslo +X = paso al frente · rodilla -X = flexión · brazo izquierdo +Z al frente,
   // brazo derecho -Z al frente (los huesos van espejados).
   const AIM_RAISE = 1.25;
-  function poseAvatar(ch, e) {
+
+  // Mezcla de animación: guarda la pose actual de cada articulación y la acerca
+  // al objetivo de este frame, así los cambios (pararse, agacharse, apuntar) son fluidos.
+  function blendBone(ch, name, target, axis, dt, rate = 10) {
+    if (!ch.bones[name]) return;
+    if (!ch.pose) ch.pose = {};
+    if (ch.poseAxis && ch.poseAxis[name] && ch.poseAxis[name] !== (axis || _xAxis)) {
+      ch.pose[name] = target; // cambió de eje: sin mezcla entre ejes distintos
+    }
+    const k = 1 - Math.exp(-rate * dt);
+    const cur = ch.pose[name] ?? target;
+    const v = cur + (target - cur) * k;
+    ch.pose[name] = v;
+    if (!ch.poseAxis) ch.poseAxis = {};
+    ch.poseAxis[name] = axis || _xAxis;
+    setBone(ch, name, v, axis);
+  }
+  function poseAvatar(ch, e, dt = 1 / 60) {
     const moving = !!(e.moving && e.alive);
     const run = e.sprinting ? 1.55 : 1;
     const t = e.walk;
-    const sw = moving ? Math.sin(t) * 0.5 * run : 0;
+    const sw = moving ? Math.sin(t) * 0.55 * run : 0;
+    const aim = e.ads ? 1 : 0;
+    const dtc = Math.min(dt, 0.1);
 
-    // Piernas: zancada, rodilla que se dobla en el avance del paso, pie que acompaña
-    setBone(ch, 'LeftUpLeg', moving ? sw : 0.03);
-    setBone(ch, 'RightUpLeg', moving ? -sw : -0.03);
-    const kneeL = 0.12 + (moving ? 0.85 * Math.max(0, Math.cos(t + 0.6)) * run : 0);
-    const kneeR = 0.12 + (moving ? 0.85 * Math.max(0, Math.cos(t + Math.PI + 0.6)) * run : 0);
-    setBone(ch, 'LeftLeg', -kneeL);
-    setBone(ch, 'RightLeg', -kneeR);
-    setBone(ch, 'LeftFoot', moving ? 0.1 + Math.sin(t + 2.6) * 0.28 : 0.06);
-    setBone(ch, 'RightFoot', moving ? 0.1 + Math.sin(t + Math.PI + 2.6) * 0.28 : 0.06);
+    // Piernas: zancada con rodilla y pie; al agacharse, rodillas muy dobladas
+    const crouchK = e.crouch ? 1 : 0;
+    blendBone(ch, 'LeftUpLeg', moving ? sw : 0.03, _xAxis, dtc, 14);
+    blendBone(ch, 'RightUpLeg', moving ? -sw : -0.03, _xAxis, dtc, 14);
+    const kneeBase = 0.12 + crouchK * 0.5;
+    const kneeL = kneeBase + (moving ? 0.85 * Math.max(0, Math.cos(t + 0.6)) * run : 0);
+    const kneeR = kneeBase + (moving ? 0.85 * Math.max(0, Math.cos(t + Math.PI + 0.6)) * run : 0);
+    blendBone(ch, 'LeftLeg', -kneeL, _xAxis, dtc, 14);
+    blendBone(ch, 'RightLeg', -kneeR, _xAxis, dtc, 14);
+    blendBone(ch, 'LeftFoot', moving ? 0.1 + Math.sin(t + 2.6) * 0.28 : 0.06, _xAxis, dtc, 14);
+    blendBone(ch, 'RightFoot', moving ? 0.1 + Math.sin(t + Math.PI + 2.6) * 0.28 : 0.06, _xAxis, dtc, 14);
 
-    // Torso: inclinación al correr y balanceo del paso; agachado se curva hacia adelante
-    const lean = (moving ? 0.07 * run : 0) + (e.crouch ? 0.32 : 0);
-    setBone(ch, 'Spine', lean);
-    setBone(ch, 'Spine1', lean * 0.8);
-    setBone(ch, 'Spine2', e.crouch ? 0.16 : lean * 0.5);
-    setBone(ch, 'Neck', e.crouch ? -0.3 : -lean * 0.4);
+    // Cadera: vaivén lateral al caminar y rebote vertical del cuerpo
+    blendBone(ch, 'Hips', moving ? Math.sin(t) * 0.09 : 0, _yAxis, dtc, 10);
+    const bobTarget = moving ? Math.abs(Math.sin(t)) * 0.055 * run : 0;
+    if (ch.body) {
+      const kb = 1 - Math.exp(-12 * dtc);
+      ch.bob = (ch.bob ?? 0) + (bobTarget - (ch.bob ?? 0)) * kb;
+      ch.body.position.y = ch.bob;
+    }
 
-    // Brazos: ambos al frente sosteniendo el arma, con vaivén al correr y respiro en reposo
+    // Torso: inclinación al correr, curvatura agachado, cuerpo al frente al apuntar
+    const lean = (moving ? (e.sprinting ? 0.13 : 0.07) : 0.01) + crouchK * 0.32 + aim * 0.05;
+    blendBone(ch, 'Spine', lean, _xAxis, dtc, 8);
+    blendBone(ch, 'Spine1', lean * 0.8, _xAxis, dtc, 8);
+    blendBone(ch, 'Spine2', crouchK * 0.16 + aim * 0.05, _xAxis, dtc, 8);
+    blendBone(ch, 'Neck', -crouchK * 0.3 - lean * 0.4 + aim * 0.12, _xAxis, dtc, 8);
+
+    // Brazos: arma al frente; apuntar sube más; vaivén al correr; respiración en reposo
     const reloadK = e.alive ? 1 - 0.45 * (ch.reloadPose || 0) : 0;
-    const sway = moving ? Math.sin(t * 2) * 0.05 * run : 0;
+    const sway = moving ? Math.sin(t * 2) * (e.sprinting ? 0.12 : 0.05) : 0;
     const breathe = !moving ? Math.sin(G.elapsed * 2 + (e.id || 0)) * 0.02 : 0;
-    const raiseL = AIM_RAISE * reloadK + sway + breathe;
-    const raiseR = AIM_RAISE * reloadK - sway + breathe;
-    setBone(ch, 'LeftArm', raiseL, _zAxis);
-    setBone(ch, 'RightArm', -raiseR, _zAxis);
-    setBone(ch, 'LeftForeArm', raiseL * 0.4, _zAxis);
-    setBone(ch, 'RightForeArm', -raiseR * 0.4, _zAxis);
-    setBone(ch, 'LeftShoulder', -sway * 0.6, _zAxis);
-    setBone(ch, 'RightShoulder', -sway * 0.6, _zAxis);
+    const raise = (AIM_RAISE + aim * 0.22) * reloadK;
+    const raiseL = raise + sway + breathe;
+    const raiseR = raise - sway + breathe;
+    blendBone(ch, 'LeftArm', raiseL, _zAxis, dtc, 12);
+    blendBone(ch, 'RightArm', -raiseR, _zAxis, dtc, 12);
+    blendBone(ch, 'LeftForeArm', raiseL * (0.4 + aim * 0.25), _zAxis, dtc, 12);
+    blendBone(ch, 'RightForeArm', -raiseR * (0.4 + aim * 0.25), _zAxis, dtc, 12);
+    blendBone(ch, 'LeftShoulder', -sway * 0.6, _zAxis, dtc, 10);
+    blendBone(ch, 'RightShoulder', -sway * 0.6, _zAxis, dtc, 10);
   }
 
   function buildAvatarCharacter(e) {
@@ -1438,7 +1470,7 @@ export function createView(canvas) {
       ch.body.scale.y += ((e.crouch ? 0.7 : 1) - ch.body.scale.y) * Math.min(1, dt * 12);
       ch.vest.visible = e.armor > 0;
       ch.reloadPose = e.reloadT > 0 ? Math.sin((1 - e.reloadT / w.reload) * Math.PI) : 0;
-      if (ch.animated) poseAvatar(ch, e);
+      if (ch.animated) poseAvatar(ch, e, dt);
 
       if (!e.alive) {
         if (!ch.dead) {

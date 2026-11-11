@@ -699,3 +699,42 @@ body::after {
   50%, 80% { transform: rotate(-90deg); }
   100% { transform: rotate(0deg); }
 }
+
+/* ===== Controles táctiles v2: más grandes y con respuesta al presionar ===== */
+.btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border-width: 2px;
+  border-color: rgba(255, 255, 255, 0.55);
+  gap: 2px;
+  transition: transform 0.09s ease, filter 0.09s ease, box-shadow 0.09s ease;
+  will-change: transform;
+}
+.btn .ico svg { width: 27px; height: 27px; stroke-width: 2.4; }
+.btn .lbl { font-size: 9px; }
+.btn.active {
+  transform: scale(0.86);
+  filter: brightness(1.5) saturate(1.3);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.18), 0 0 22px rgba(255, 255, 255, 0.35), inset 0 2px 0 rgba(255, 255, 255, 0.3);
+}
+.btn.fire-btn {
+  width: 96px;
+  height: 96px;
+  border-width: 3px;
+  border-color: rgba(255, 90, 90, 0.75);
+  background: radial-gradient(circle at 35% 28%, rgba(255, 120, 120, 0.35), rgba(120, 18, 18, 0.82) 75%);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55), 0 0 24px rgba(255, 70, 70, 0.35), inset 0 2px 0 rgba(255, 255, 255, 0.3);
+  animation: firePulse 2.2s ease-in-out infinite;
+}
+.btn.fire-btn .ico svg { width: 40px; height: 40px; }
+.btn.fire-btn .lbl { font-size: 10px; }
+.btn.fire-btn.active { animation: none; }
+@keyframes firePulse {
+  0%, 100% { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55), 0 0 20px rgba(255, 70, 70, 0.3), inset 0 2px 0 rgba(255, 255, 255, 0.3); }
+  50% { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55), 0 0 34px rgba(255, 90, 90, 0.6), inset 0 2px 0 rgba(255, 255, 255, 0.3); }
+}
+.btn.jump-btn, .btn.crouch-btn, .btn.sprint-btn, .btn.heal-btn, .btn.grenade-btn, .btn.reload-btn {
+  background: radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.28), rgba(16, 22, 36, 0.85) 75%);
+}
+#joyKnob { box-shadow: 0 0 14px rgba(53, 214, 255, 0.55); }
