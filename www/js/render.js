@@ -162,6 +162,9 @@ export function createView(canvas) {
     roof: box(1, 0.4, 1),
     chimney: box(0.6, 1.6, 0.6),
     door: box(0.9, 2.0, 0.1),
+    framePost: box(0.16, 2.2, 0.18),
+    frameLintel: box(1.4, 0.2, 0.2),
+    doorstep: box(1.35, 0.14, 0.6),
     lampPole: new THREE.CylinderGeometry(0.06, 0.08, 4.2, 6),
     lampHead: new THREE.SphereGeometry(0.22, 10, 8),
     tracer: box(0.035, 0.035, 1),
@@ -252,6 +255,7 @@ export function createView(canvas) {
     rock: new THREE.MeshStandardMaterial({ color: 0x8d8f94, roughness: 0.95, flatShading: true }),
     bush: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }),
     roof: new THREE.MeshStandardMaterial({ color: 0x4e4e52, roughness: 0.8 }),
+    trim: new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.8 }),
     glass: new THREE.MeshStandardMaterial({ color: 0x1d3557, roughness: 0.12, metalness: 0.5, side: THREE.DoubleSide }),
     glassLit: new THREE.MeshStandardMaterial({ color: 0xffd58a, emissive: 0xffb74d, emissiveIntensity: 1.1, roughness: 0.3, side: THREE.DoubleSide }),
     lampHead: new THREE.MeshStandardMaterial({ color: 0xfff3cf, emissive: 0xffd27a, emissiveIntensity: 2.0 }),
@@ -277,6 +281,7 @@ export function createView(canvas) {
   const armorBeam = new THREE.MeshBasicMaterial({ color: 0x7ac7ff, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending });
   const zoneMat = new THREE.MeshBasicMaterial({ color: 0x3b8bff, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false });
   const zoneLineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+  const roofMats = [0x8c3b2e, 0x51606e, 0x4a5d48, 0x6e4b2a, 0x3b4050].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
   const playerRingMat = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
 
   // ----- Modelos de arma (origen en la empuñadura, cañón hacia +z) -----
@@ -463,7 +468,7 @@ export function createView(canvas) {
       shape.closePath();
       const rg = new THREE.ExtrudeGeometry(shape, { depth: len, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06, bevelSegments: 2 });
       rg.translate(0, 0, -len / 2);
-      const roof = new THREE.Mesh(rg, M.roof);
+      const roof = new THREE.Mesh(rg, roofMats[(o.x * 7 + o.z * 13) % roofMats.length]);
       if (ridgeX) {
         roof.rotation.y = Math.PI / 2;
         roof.position.set(o.x + o.w / 2, o.h, o.z + o.d / 2);
@@ -472,6 +477,20 @@ export function createView(canvas) {
       }
       roof.castShadow = true;
       worldGroup.add(roof);
+
+      // Moldura bajo el alero y pilastras en las esquinas para dar volumen a la fachada
+      const fascia = new THREE.Mesh(box(o.w + 0.34, 0.22, o.d + 0.34), M.trim);
+      fascia.position.set(o.x + o.w / 2, o.h - 0.04, o.z + o.d / 2);
+      fascia.castShadow = true;
+      worldGroup.add(fascia);
+      for (const cx of [o.x + 0.09, o.x + o.w - 0.09]) {
+        for (const cz of [o.z + 0.09, o.z + o.d - 0.09]) {
+          const pil = new THREE.Mesh(box(0.18, o.h, 0.18), M.trim);
+          pil.position.set(cx, o.h / 2, cz);
+          pil.castShadow = true;
+          worldGroup.add(pil);
+        }
+      }
 
       // Chimenea en la mitad de los edificios
       if (Math.random() < 0.5) {
@@ -482,7 +501,29 @@ export function createView(canvas) {
       }
 
       const face = Math.random() < 0.5;
-      doors.push({ x: face ? o.x + o.w * (0.3 + Math.random() * 0.4) : o.x - 0.02, z: face ? o.z - 0.02 : o.z + o.d * (0.3 + Math.random() * 0.4), ry: face ? Math.PI : -Math.PI / 2 });
+      const dx = face ? o.x + o.w * (0.3 + Math.random() * 0.4) : o.x - 0.02;
+      const dz = face ? o.z - 0.02 : o.z + o.d * (0.3 + Math.random() * 0.4);
+      doors.push({ x: dx, z: dz, ry: face ? Math.PI : -Math.PI / 2 });
+      // Marco de la puerta: dos jambas, dintel y escalón
+      const p1 = new THREE.Mesh(geo.framePost, M.trim);
+      const p2 = new THREE.Mesh(geo.framePost, M.trim);
+      const lintel = new THREE.Mesh(geo.frameLintel, M.trim);
+      const step = new THREE.Mesh(geo.doorstep, M.plinth);
+      if (face) {
+        p1.position.set(dx - 0.52, 1.05, dz);
+        p2.position.set(dx + 0.52, 1.05, dz);
+        lintel.position.set(dx, 2.22, dz);
+        step.position.set(dx, 0.07, dz - 0.3);
+      } else {
+        p1.position.set(dx, 1.05, dz - 0.52);
+        p2.position.set(dx, 1.05, dz + 0.52);
+        lintel.rotation.y = Math.PI / 2;
+        lintel.position.set(dx, 2.22, dz);
+        step.rotation.y = Math.PI / 2;
+        step.position.set(dx - 0.3, 0.07, dz);
+      }
+      p1.castShadow = p2.castShadow = lintel.castShadow = step.castShadow = true;
+      worldGroup.add(p1, p2, lintel, step);
     }
     if (doors.length) {
       const im = new THREE.InstancedMesh(geo.door, M.door, doors.length);
@@ -682,18 +723,47 @@ export function createView(canvas) {
     bn.b.quaternion.copy(bn.rest).multiply(_poseQ);
   }
 
-  // Pose del avatar: piernas al caminar, brazos al frente para sostener el arma
-  // Brazos al frente: el eje Z y el signo se comprobaron viendo el personaje de frente
-  const ARM_RAISE = -1.25;
+  // Pose del avatar con articulaciones completas: zancada con rodilla y pie,
+  // balanceo de torso y hombros, codos flexionados y brazos sosteniendo el arma.
+  // Signos verificados contra el esqueleto del modelo (frente del personaje = +z):
+  // muslo +X = paso al frente · rodilla -X = flexión · brazo izquierdo +Z al frente,
+  // brazo derecho -Z al frente (los huesos van espejados).
+  const AIM_RAISE = 1.25;
   function poseAvatar(ch, e) {
-    const sw = e.moving ? Math.sin(e.walk) * (e.sprinting ? 0.9 : 0.5) : 0;
-    setBone(ch, 'LeftUpLeg', sw);
-    setBone(ch, 'RightUpLeg', -sw);
-    const aim = e.alive ? ARM_RAISE * (1 - 0.45 * (ch.reloadPose || 0)) : 0;
-    setBone(ch, 'LeftArm', aim, _zAxis);
-    setBone(ch, 'RightArm', aim, _zAxis);
-    setBone(ch, 'LeftForeArm', aim * 0.35, _zAxis);
-    setBone(ch, 'RightForeArm', aim * 0.35, _zAxis);
+    const moving = !!(e.moving && e.alive);
+    const run = e.sprinting ? 1.55 : 1;
+    const t = e.walk;
+    const sw = moving ? Math.sin(t) * 0.5 * run : 0;
+
+    // Piernas: zancada, rodilla que se dobla en el avance del paso, pie que acompaña
+    setBone(ch, 'LeftUpLeg', moving ? sw : 0.03);
+    setBone(ch, 'RightUpLeg', moving ? -sw : -0.03);
+    const kneeL = 0.12 + (moving ? 0.85 * Math.max(0, Math.cos(t + 0.6)) * run : 0);
+    const kneeR = 0.12 + (moving ? 0.85 * Math.max(0, Math.cos(t + Math.PI + 0.6)) * run : 0);
+    setBone(ch, 'LeftLeg', -kneeL);
+    setBone(ch, 'RightLeg', -kneeR);
+    setBone(ch, 'LeftFoot', moving ? 0.1 + Math.sin(t + 2.6) * 0.28 : 0.06);
+    setBone(ch, 'RightFoot', moving ? 0.1 + Math.sin(t + Math.PI + 2.6) * 0.28 : 0.06);
+
+    // Torso: inclinación al correr y balanceo del paso; agachado se curva hacia adelante
+    const lean = (moving ? 0.07 * run : 0) + (e.crouch ? 0.32 : 0);
+    setBone(ch, 'Spine', lean);
+    setBone(ch, 'Spine1', lean * 0.8);
+    setBone(ch, 'Spine2', e.crouch ? 0.16 : lean * 0.5);
+    setBone(ch, 'Neck', e.crouch ? -0.3 : -lean * 0.4);
+
+    // Brazos: ambos al frente sosteniendo el arma, con vaivén al correr y respiro en reposo
+    const reloadK = e.alive ? 1 - 0.45 * (ch.reloadPose || 0) : 0;
+    const sway = moving ? Math.sin(t * 2) * 0.05 * run : 0;
+    const breathe = !moving ? Math.sin(G.elapsed * 2 + (e.id || 0)) * 0.02 : 0;
+    const raiseL = AIM_RAISE * reloadK + sway + breathe;
+    const raiseR = AIM_RAISE * reloadK - sway + breathe;
+    setBone(ch, 'LeftArm', raiseL, _zAxis);
+    setBone(ch, 'RightArm', -raiseR, _zAxis);
+    setBone(ch, 'LeftForeArm', raiseL * 0.4, _zAxis);
+    setBone(ch, 'RightForeArm', -raiseR * 0.4, _zAxis);
+    setBone(ch, 'LeftShoulder', -sway * 0.6, _zAxis);
+    setBone(ch, 'RightShoulder', -sway * 0.6, _zAxis);
   }
 
   function buildAvatarCharacter(e) {
@@ -727,7 +797,7 @@ export function createView(canvas) {
 
     // Huesos que movemos a mano, guardando su postura de reposo para componer las rotaciones
     const bones = {};
-    for (const n of ['Hips', 'Spine', 'LeftUpLeg', 'RightUpLeg', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm']) {
+    for (const n of ['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'LeftShoulder', 'RightShoulder', 'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg', 'LeftFoot', 'RightFoot', 'LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm']) {
       const b = model.getObjectByName(n);
       if (b) bones[n] = { b, rest: b.quaternion.clone() };
     }
@@ -814,40 +884,55 @@ export function createView(canvas) {
       part(geo.mouth, M.dark, 0, 1.63, 0.17, false);
     }
 
-    // Piernas (pivote en la cadera)
+    // Piernas con articulación: cadera (pivote) + rodilla + bota
     const legs = [];
     for (const sx of [-0.12, 0.12]) {
-      const pivot = new THREE.Group();
-      pivot.position.set(sx, 0.86, 0);
-      const leg = new THREE.Mesh(geo.leg, pantsMat);
-      leg.position.y = -0.36;
-      leg.castShadow = true;
+      const hip = new THREE.Group();
+      hip.position.set(sx, 0.86, 0);
+      const thigh = new THREE.Mesh(geo.leg, pantsMat);
+      thigh.scale.y = 0.56;
+      thigh.position.y = -0.2;
+      thigh.castShadow = true;
+      const knee = new THREE.Group();
+      knee.position.y = -0.4;
+      const shin = new THREE.Mesh(geo.leg, pantsMat);
+      shin.scale.y = 0.44;
+      shin.position.y = -0.16;
+      shin.castShadow = true;
       const boot = new THREE.Mesh(geo.boot, M.boots);
-      boot.position.set(0, -0.7, 0.02);
+      boot.position.set(0, -0.38, 0.02);
       boot.castShadow = true;
-      pivot.add(leg, boot);
-      body.add(pivot);
-      legs.push(pivot);
+      knee.add(shin, boot);
+      hip.add(thigh, knee);
+      body.add(hip);
+      legs.push({ hip, knee });
     }
 
-    // Brazos (pivote en el hombro, apuntando al frente)
+    // Brazos con articulación: hombro (pivote al frente) + codo + mano
     const arms = [];
     for (const sx of [-0.35, 0.35]) {
-      const pivot = new THREE.Group();
-      pivot.position.set(sx, 1.46, 0);
-      pivot.rotation.x = -1.35;
-      const arm = new THREE.Mesh(geo.arm, shirtMat);
-      arm.position.y = -0.3;
-      arm.castShadow = true;
+      const shoulder = new THREE.Group();
+      shoulder.position.set(sx, 1.46, 0);
+      shoulder.rotation.x = -1.35;
+      const ball = new THREE.Mesh(geo.shoulder, shirtMat);
+      ball.castShadow = true;
+      const upper = new THREE.Mesh(geo.arm, shirtMat);
+      upper.scale.y = 0.5;
+      upper.position.y = -0.15;
+      upper.castShadow = true;
+      const elbow = new THREE.Group();
+      elbow.position.y = -0.3;
+      const fore = new THREE.Mesh(geo.arm, shirtMat);
+      fore.scale.y = 0.5;
+      fore.position.y = -0.15;
+      fore.castShadow = true;
       const hand = new THREE.Mesh(geo.hand, glovesMat);
-      const shoulder = new THREE.Mesh(geo.shoulder, shirtMat);
-      shoulder.castShadow = true;
-      pivot.add(shoulder);
-      hand.position.y = -0.64;
+      hand.position.y = -0.34;
       hand.castShadow = true;
-      pivot.add(arm, hand);
-      body.add(pivot);
-      arms.push(pivot);
+      elbow.add(fore, hand);
+      shoulder.add(ball, upper, elbow);
+      body.add(shoulder);
+      arms.push({ shoulder, elbow });
     }
 
     // Armas: un modelo por tipo, solo se muestra la activa
@@ -1147,8 +1232,12 @@ export function createView(canvas) {
       // Caminar: piernas alternando y balanceo del cuerpo (el modelo animado lo hace solo)
       const swing = e.moving ? Math.sin(e.walk) * 0.7 : 0;
       if (!ch.animated) {
-        ch.legs[0].rotation.x = swing;
-        ch.legs[1].rotation.x = -swing;
+        ch.legs[0].hip.rotation.x = swing;
+        ch.legs[1].hip.rotation.x = -swing;
+        const bendL = 0.1 + (e.moving ? 0.65 * Math.max(0, Math.cos(e.walk + 0.6)) : 0);
+        const bendR = 0.1 + (e.moving ? 0.65 * Math.max(0, Math.cos(e.walk + Math.PI + 0.6)) : 0);
+        ch.legs[0].knee.rotation.x = bendL;
+        ch.legs[1].knee.rotation.x = bendR;
       }
       walkBob = e.moving ? Math.abs(Math.sin(e.walk * 2)) * 0.05 : 0;
       const breathe = Math.sin(G.elapsed * 2 + e.id) * 0.01;
@@ -1208,8 +1297,10 @@ export function createView(canvas) {
         ch.gunPivot.rotation.set(gunRx - ch.kick * 0.1, 0, gunRz);
       }
       if (!ch.animated) {
-        ch.arms[0].rotation.x = armRx;
-        ch.arms[1].rotation.x = armRxR;
+        ch.arms[0].shoulder.rotation.x = armRx;
+        ch.arms[1].shoulder.rotation.x = armRxR;
+        ch.arms[0].elbow.rotation.x = -0.3;
+        ch.arms[1].elbow.rotation.x = -0.35 - ch.kick * 0.25;
       }
       if (ch.ring) ch.ring.visible = true;
     }
