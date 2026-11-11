@@ -347,12 +347,14 @@ function handleEvents() {
     switch (ev.type) {
       case 'shot': {
         const d = Math.hypot(ev.x - p.x, ev.z - p.z);
-        if (d < 70) SFX.playShot(ev.weapon);
+        if (d < 70) SFX.playShot(ev.weapon, d);
         break;
       }
-      case 'explosion':
-        if (Math.hypot(ev.x - p.x, ev.z - p.z) < 45) SFX.playExplosion();
+      case 'explosion': {
+        const d = Math.hypot(ev.x - p.x, ev.z - p.z);
+        if (d < 45) SFX.playExplosion(d);
         break;
+      }
       case 'hurt':
         SFX.playHurt();
         damageTimer = 0.35;
@@ -438,7 +440,7 @@ function updateHUD(dt) {
     els.reloadfill.style.width = '0%';
   }
   els.grenades.textContent = `${p.grenades}/${MAX_GRENADES}`;
-  els.meds.textContent = `${p.meds}/${MAX_MEDS}`;
+  els.meds.textContent = `${p.meds}/${p.medMax || MAX_MEDS}`;
   els.feed.textContent = G.feed.map((f) => f.text).join('\n');
 
   // Mira: se abre al disparar y al moverse, se cierra al apuntar

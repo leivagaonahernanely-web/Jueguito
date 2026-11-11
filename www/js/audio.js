@@ -70,10 +70,11 @@ const SHOTS = {
   francotirador: { freq: 1200, decay: 0.45, gain: 0.8, thump: 70 },
 };
 
-export function playShot(weapon) {
+export function playShot(weapon, dist = 0) {
   const s = SHOTS[weapon] || SHOTS.pistola;
-  noise(s.decay + 0.1, { type: 'bandpass', freq: s.freq, q: 0.8, gain: s.gain, decay: s.decay, detune: Math.random() * 0.1 });
-  tone(s.thump, 0.12, { type: 'sine', gain: 0.35, endFreq: 40 });
+  const v = Math.max(0.15, 1 - dist / 70);
+  noise(s.decay + 0.1, { type: 'bandpass', freq: s.freq, q: 0.8, gain: s.gain * v, decay: s.decay, detune: Math.random() * 0.1 });
+  tone(s.thump, 0.12, { type: 'sine', gain: 0.35 * v, endFreq: 40 });
 }
 
 export function playReload() {
@@ -93,9 +94,10 @@ export function playHurt() {
   tone(160, 0.14, { type: 'sawtooth', gain: 0.18, endFreq: 70 });
 }
 
-export function playExplosion() {
-  noise(1.2, { type: 'lowpass', freq: 500, gain: 1.0, decay: 1.1, attack: 0.003 });
-  tone(60, 0.9, { type: 'sine', gain: 0.8, endFreq: 25 });
+export function playExplosion(dist = 0) {
+  const v = Math.max(0.15, 1 - dist / 45);
+  noise(1.2, { type: 'lowpass', freq: 500, gain: 1.0 * v, decay: 1.1, attack: 0.003 });
+  tone(60, 0.9, { type: 'sine', gain: 0.8 * v, endFreq: 25 });
 }
 
 export function playPickup() {

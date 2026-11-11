@@ -45,16 +45,62 @@ export function pickWeaponKey() {
   return 'pistola';
 }
 
-// ---------- Geometría del mapa ----------
-export function blockedAt(x, y, z) {
-  for (const o of G.obstacles) {
-    if (o.shape === 'rect') {
-      if (y < o.h && x >= o.x && x <= o.x + o.w && z >= o.z && z <= o.z + o.d) return true;
-    } else if (y < o.h && Math.hypot(x - o.x, z - o.z) < o.r) {
-      return true;
+
+// ---------- Rejilla espacial ----------
+// Divide el mapa en celdas para no recorrer todos los obstáculos en cada consulta
+// (balas, línea de visión y colisiones preguntan solo las celdas cercanas).
+const GRID_CELL = 16;
+let grid = null;
+let gridW = 0;
+
+function buildGrid() {
+  gridW = Math.max(1, Math.ceil(WORLD / GRID_CELL));
+  grid = new Array(gridW * gridW);
+  for (let i = 0; i < grid.length; i++) grid[i] = [];
+  G.obstacles.forEach((o, idx) => {
+    const minX = o.shape === 'rect' ? o.x : o.x - o.r;
+    const maxX = o.shape === 'rect' ? o.x + o.w : o.x + o.r;
+    const minZ = o.shape === 'rect' ? o.z : o.z - o.r;
+    const maxZ = o.shape === 'rect' ? o.z + o.d : o.z + o.r;
+    const x0 = clamp(Math.floor(minX / GRID_CELL), 0, gridW - 1);
+    const x1 = clamp(Math.floor(maxX / GRID_CELL), 0, gridW - 1);
+    const z0 = clamp(Math.floor(minZ / GRID_CELL), 0, gridW - 1);
+    const z1 = clamp(Math.floor(maxZ / GRID_CELL), 0, gridW - 1);
+    for (let gx = x0; gx <= x1; gx++) {
+      const base = gx * gridW;
+      for (let gz = z0; gz <= z1; gz++) grid[base + gz].push(idx);
+    }
+  });
+}
+
+// Llama fn(o) por cada obstáculo cuyo recuadro toca la zona dada
+function forEachNear(minX, minZ, maxX, maxZ, fn) {
+  if (!grid) { for (const o of G.obstacles) fn(o); return; }
+  const x0 = clamp(Math.floor(minX / GRID_CELL), 0, gridW - 1);
+  const x1 = clamp(Math.floor(maxX / GRID_CELL), 0, gridW - 1);
+  const z0 = clamp(Math.floor(minZ / GRID_CELL), 0, gridW - 1);
+  const z1 = clamp(Math.floor(maxZ / GRID_CELL), 0, gridW - 1);
+  for (let gx = x0; gx <= x1; gx++) {
+    const base = gx * gridW;
+    for (let gz = z0; gz <= z1; gz++) {
+      const cell = grid[base + gz];
+      for (let k = 0; k < cell.length; k++) fn(G.obstacles[cell[k]]);
     }
   }
-  return false;
+}
+
+// ---------- Geometría del mapa ----------
+export function blockedAt(x, y, z) {
+  let hit = false;
+  forEachNear(x - 1, z - 1, x + 1, z + 1, (o) => {
+    if (hit) return;
+    if (o.shape === 'rect') {
+      if (y < o.h && x >= o.x && x <= o.x + o.w && z >= o.z && z <= o.z + o.d) hit = true;
+    } else if (y < o.h && Math.hypot(x - o.x, z - o.z) < o.r) {
+      hit = true;
+    }
+  });
+  return hit;
 }
 
 function losClear(x1, z1, x2, z2) {
@@ -68,31 +114,36 @@ function losClear(x1, z1, x2, z2) {
 }
 
 function fitsRect(x, z, w, d, pad) {
-  for (const o of G.obstacles) {
+  let ok = true;
+  forEachNear(x - pad - 1, z - pad - 1, x + w + pad + 1, z + d + pad + 1, (o) => {
+    if (!ok) return;
     if (o.shape === 'rect') {
-      if (x < o.x + o.w + pad && x + w > o.x - pad && z < o.z + o.d + pad && z + d > o.z - pad) return false;
+      if (x < o.x + o.w + pad && x + w > o.x - pad && z < o.z + o.d + pad && z + d > o.z - pad) ok = false;
     } else {
       const cx = clamp(o.x, x, x + w), cz = clamp(o.z, z, z + d);
-      if (Math.hypot(o.x - cx, o.z - cz) < o.r + pad) return false;
+      if (Math.hypot(o.x - cx, o.z - cz) < o.r + pad) ok = false;
     }
-  }
-  return true;
+  });
+  return ok;
 }
 
 function fitsCircle(x, z, r, pad) {
-  for (const o of G.obstacles) {
+  let ok = true;
+  forEachNear(x - r - pad - 1, z - r - pad - 1, x + r + pad + 1, z + r + pad + 1, (o) => {
+    if (!ok) return;
     if (o.shape === 'rect') {
       const cx = clamp(x, o.x, o.x + o.w), cz = clamp(z, o.z, o.z + o.d);
-      if (Math.hypot(x - cx, z - cz) < r + pad) return false;
+      if (Math.hypot(x - cx, z - cz) < r + pad) ok = false;
     } else if (Math.hypot(x - o.x, z - o.z) < r + o.r + pad) {
-      return false;
+      ok = false;
     }
-  }
-  return true;
+  });
+  return ok;
 }
 
 export function genMap() {
   G.obstacles = [];
+  grid = null; // la rejilla se reconstruye al terminar el mapa
   let n = 0, t = 0;
   while (n < HOUSE_COUNT && t < 8000) {
     t++;
@@ -120,6 +171,20 @@ export function genMap() {
     G.obstacles.push({ shape: 'circle', kind: 'arbol', x, z, r, h: 2.4 });
     n++;
   }
+  buildGrid();
+}
+
+
+// Punto libre dentro de la zona segura (para que los bots no merodeen fuera y mueran)
+function zoneSpot(margin = 14) {
+  for (let i = 0; i < 200; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const rr = Math.sqrt(Math.random()) * Math.max(4, G.zone.radius - margin);
+    const x = G.zone.cx + Math.cos(ang) * rr;
+    const z = G.zone.cz + Math.sin(ang) * rr;
+    if (fitsCircle(x, z, PLAYER_RADIUS, 0.3)) return { x, z };
+  }
+  return { x: G.zone.cx, z: G.zone.cz };
 }
 
 function freeSpot(r = PLAYER_RADIUS) {
@@ -160,7 +225,7 @@ function moveEnt(e, dx, dz) {
 function resolveCollisions(e) {
   e.x = clamp(e.x, e.r, WORLD - e.r);
   e.z = clamp(e.z, e.r, WORLD - e.r);
-  for (const o of G.obstacles) {
+  forEachNear(e.x - e.r - 1.2, e.z - e.r - 1.2, e.x + e.r + 1.2, e.z + e.r + 1.2, (o) => {
     if (o.shape === 'rect') {
       const cx = clamp(e.x, o.x, o.x + o.w);
       const cz = clamp(e.z, o.z, o.z + o.d);
@@ -192,7 +257,7 @@ function resolveCollisions(e) {
         e.z += dz * p;
       }
     }
-  }
+  });
 }
 
 function stepToward(e, tx, tz, speed, dt) {
@@ -448,10 +513,22 @@ function updateZone(dt) {
       z.state = 'shrink';
       z.t = 0;
       z.from = z.radius;
+      z.fromCx = z.cx;
+      z.fromCz = z.cz;
+      // El centro de la próxima zona cae en un punto distinto cada partida,
+      // dentro del círculo actual y siempre dentro del mapa
+      const nr = ZONE_PHASES[Math.min(z.phase, ZONE_PHASES.length - 1)].radius;
+      const maxOff = Math.max(0, z.radius - nr) * 0.9;
+      const ang = Math.random() * Math.PI * 2;
+      const off = Math.sqrt(Math.random()) * maxOff;
+      z.tx = clamp(z.cx + Math.cos(ang) * off, nr + 4, WORLD - nr - 4);
+      z.tz = clamp(z.cz + Math.sin(ang) * off, nr + 4, WORLD - nr - 4);
     }
   } else {
     const k = Math.min(1, z.t / ph.shrink);
     z.radius = z.from + (ph.radius - z.from) * k;
+    z.cx = z.fromCx + (z.tx - z.fromCx) * k;
+    z.cz = z.fromCz + (z.tz - z.fromCz) * k;
     if (k >= 1) {
       z.phase++;
       z.state = 'hold';
@@ -584,6 +661,7 @@ function updateBot(b, dt) {
         let bestL = 40;
         for (const it of G.loot) {
           if (it.lock > 0) continue;
+          if (Math.hypot(it.x - G.zone.cx, it.z - G.zone.cz) > G.zone.radius - 6) continue;
           const d = Math.hypot(b.x - it.x, b.z - it.z);
           if (d < bestL) { bestL = d; b.goal = it; }
         }
@@ -631,7 +709,7 @@ function updateBot(b, dt) {
     if (b.ammo < w.mag * 0.3) startReload(b);
     b.wanderT -= dt;
     if (b.wanderT <= 0 || Math.hypot(b.x - b.wanderX, b.z - b.wanderZ) < 1.5) {
-      const s = freeSpot();
+      const s = zoneSpot();
       b.wanderX = s.x;
       b.wanderZ = s.z;
       b.wanderT = rand(3, 6);
@@ -685,7 +763,8 @@ export function startMatch(name = 'Tú', charId = 'recluta') {
   G.zone = {
     phase: 0, state: 'hold', t: 0,
     radius: ZONE_START_RADIUS, from: ZONE_START_RADIUS,
-    cx: WORLD / 2, cz: WORLD / 2,
+    cx: WORLD / 2, cz: WORLD / 2, fromCx: WORLD / 2, fromCz: WORLD / 2,
+    tx: WORLD / 2, tz: WORLD / 2,
   };
   G.state = 'playing';
 }
