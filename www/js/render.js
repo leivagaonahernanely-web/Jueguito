@@ -77,7 +77,54 @@ export function createView(canvas) {
   );
   scene.add(sky);
 
+  // Nubes: sprites con textura de manchas suaves, arriba del mapa
+  const cloudTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    for (let i = 0; i < 9; i++) {
+      const x = 30 + Math.random() * 68, y = 50 + Math.random() * 30, r = 16 + Math.random() * 20;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(255,255,255,0.85)');
+      grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grd;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const cloudSprites = [];
+  for (let i = 0; i < 16; i++) {
+    const m = new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0.55 + Math.random() * 0.3, depthWrite: false, fog: false });
+    const sp = new THREE.Sprite(m);
+    const sc = 90 + Math.random() * 110;
+    sp.scale.set(sc, sc * 0.45, 1);
+    const a = Math.random() * Math.PI * 2, d = 250 + Math.random() * 350;
+    sp.position.set(Math.cos(a) * d, 160 + Math.random() * 60, Math.sin(a) * d);
+    scene.add(sp);
+    cloudSprites.push(sp);
+  }
+
   // ----- Geometrías compartidas -----
+  // Copa de árbol: esfera con ruido en los vértices para que no parezca un cristal
+  function makeCanopyGeometry(radius, seed) {
+    const g = new THREE.IcosahedronGeometry(radius, 4);
+    const pos = g.attributes.position;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      const n = 1
+        + 0.12 * Math.sin(v.x * 3.1 + seed) * Math.cos(v.z * 2.7 - seed)
+        + 0.08 * Math.sin(v.y * 5.3 + v.x * 2.2 + seed * 0.5)
+        + 0.05 * Math.sin(v.z * 7.9 + seed);
+      v.multiplyScalar(n);
+      pos.setXYZ(i, v.x, v.y, v.z);
+    }
+    g.computeVertexNormals();
+    return g;
+  }
+
   const box = (x, y, z) => new THREE.BoxGeometry(x, y, z);
   const geo = {
     torso: new RoundedBoxGeometry(0.5, 0.62, 0.3, 4, 0.08),
@@ -105,8 +152,9 @@ export function createView(canvas) {
     armorBox: box(0.55, 0.42, 0.34),
     beam: new THREE.CylinderGeometry(0.1, 0.1, 9, 8, 1, true),
     crate: box(1, 1, 1),
-    trunk: new THREE.CylinderGeometry(0.22, 0.32, 2.6, 7),
-    foliage: new THREE.IcosahedronGeometry(1.25, 1),
+    trunk: new THREE.CylinderGeometry(0.16, 0.3, 2.6, 9),
+    foliage: makeCanopyGeometry(1.25, 11),
+    foliageTop: makeCanopyGeometry(0.85, 23),
     rock: new THREE.DodecahedronGeometry(0.5, 0),
     bush: new THREE.IcosahedronGeometry(0.6, 0),
     window: new RoundedBoxGeometry(0.9, 1.2, 0.1, 2, 0.02),
@@ -200,7 +248,7 @@ export function createView(canvas) {
     grenade: new THREE.MeshStandardMaterial({ color: 0x3f5a3a, roughness: 0.6, metalness: 0.2 }),
     wood: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }),
     trunk: new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 1 }),
-    foliage: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }),
+    foliage: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }),
     rock: new THREE.MeshStandardMaterial({ color: 0x8d8f94, roughness: 0.95, flatShading: true }),
     bush: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }),
     roof: new THREE.MeshStandardMaterial({ color: 0x4e4e52, roughness: 0.8 }),
@@ -513,6 +561,7 @@ export function createView(canvas) {
     if (trees.length) {
       const trunks = new THREE.InstancedMesh(geo.trunk, M.trunk, trees.length);
       const leaves = new THREE.InstancedMesh(geo.foliage, M.foliage, trees.length);
+      const leavesTop = new THREE.InstancedMesh(geo.foliageTop, M.foliage, trees.length);
       trees.forEach((o, i) => {
         const s = 0.9 + Math.random() * 0.55;
         dummy.position.set(o.x, 1.3, o.z);
@@ -520,17 +569,27 @@ export function createView(canvas) {
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         trunks.setMatrixAt(i, dummy.matrix);
-        dummy.position.set(o.x, 3.4 * s, o.z);
+        // Copa principal, más ancha
+        dummy.position.set(o.x, 3.2 * s, o.z);
         dummy.rotation.set(0, Math.random() * 3, 0);
-        dummy.scale.set(s, s * 1.12, s);
+        dummy.scale.set(s * 1.1, s * 0.95, s * 1.1);
         dummy.updateMatrix();
         leaves.setMatrixAt(i, dummy.matrix);
-        leaves.setColorAt(i, new THREE.Color().setHSL(0.27 + Math.random() * 0.06, 0.5, 0.24 + Math.random() * 0.14));
+        // Copa superior, más pequeña y algo desplazada
+        dummy.position.set(o.x + (Math.random() - 0.5) * 0.4, 4.4 * s, o.z + (Math.random() - 0.5) * 0.4);
+        dummy.scale.set(s * 0.8, s * 0.75, s * 0.8);
+        dummy.updateMatrix();
+        leavesTop.setMatrixAt(i, dummy.matrix);
+        const tone = new THREE.Color().setHSL(0.25 + Math.random() * 0.08, 0.45 + Math.random() * 0.15, 0.2 + Math.random() * 0.12);
+        leaves.setColorAt(i, tone);
+        leavesTop.setColorAt(i, tone.clone().offsetHSL(0.01, 0.05, 0.05));
       });
       trunks.castShadow = true;
       leaves.castShadow = true;
+      leavesTop.castShadow = true;
       leaves.receiveShadow = true;
-      worldGroup.add(trunks, leaves);
+      leavesTop.receiveShadow = true;
+      worldGroup.add(trunks, leaves, leavesTop);
     }
 
     // Faroles en los caminos y cerca de casas
@@ -630,7 +689,7 @@ export function createView(canvas) {
     const sw = e.moving ? Math.sin(e.walk) * (e.sprinting ? 0.9 : 0.5) : 0;
     setBone(ch, 'LeftUpLeg', sw);
     setBone(ch, 'RightUpLeg', -sw);
-    const aim = e.alive ? ARM_RAISE : 0;
+    const aim = e.alive ? ARM_RAISE * (1 - 0.45 * (ch.reloadPose || 0)) : 0;
     setBone(ch, 'LeftArm', aim, _zAxis);
     setBone(ch, 'RightArm', aim, _zAxis);
     setBone(ch, 'LeftForeArm', aim * 0.35, _zAxis);
@@ -1065,6 +1124,7 @@ export function createView(canvas) {
       ch.root.position.set(e.x, 0, e.z);
       ch.root.rotation.y = e.yaw;
       ch.vest.visible = e.armor > 0;
+      ch.reloadPose = e.reloadT > 0 ? Math.sin((1 - e.reloadT / w.reload) * Math.PI) : 0;
       if (ch.animated) poseAvatar(ch, e);
 
       if (!e.alive) {
@@ -1143,7 +1203,7 @@ export function createView(canvas) {
         ch.hand.getWorldPosition(tmpV);
         ch.root.worldToLocal(tmpV);
         ch.gunPivot.position.copy(tmpV);
-        ch.gunPivot.rotation.set(0, 0, 0);
+        ch.gunPivot.rotation.set(gunRx - ch.kick * 0.1, 0, gunRz);
       }
       if (!ch.animated) {
         ch.arms[0].rotation.x = armRx;
